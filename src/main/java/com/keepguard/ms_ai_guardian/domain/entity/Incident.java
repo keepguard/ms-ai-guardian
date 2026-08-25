@@ -54,6 +54,15 @@ public class Incident {
     @Column(columnDefinition = "TEXT")
     private String aiRecommendedAction;
 
+    @Column(name = "fingerprint", length = 64)
+    private String fingerprint;
+
+    @Builder.Default
+    @Column(name = "occurrences_count", nullable = false)
+    private int occurrencesCount = 1;
+
+    private LocalDateTime lastSeenAt;
+
     private String targetRecipientEmail;
 
     private boolean notificationSent;

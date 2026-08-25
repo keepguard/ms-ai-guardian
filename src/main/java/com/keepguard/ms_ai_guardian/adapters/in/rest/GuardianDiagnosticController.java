@@ -23,8 +23,36 @@ public class GuardianDiagnosticController {
     private final AiDiagnosticService aiDiagnosticService;
     private final IncidentRepository incidentRepository;
 
+    private final org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
+
+    @PostMapping("/diagnose/async")
+    @Operation(summary = "Ingestão assíncrona ultra-rápida (202 Accepted) para suportar tempestades de 1.000+ alertas/minuto")
+    public ResponseEntity<com.keepguard.ms_ai_guardian.infrastructure.messaging.dto.IncidentQueueMessage> triggerDiagnosisAsync(@RequestBody ManualDiagnoseRequestDTO request) {
+        String namespace = request.getNamespace() != null ? request.getNamespace() : "keepguard";
+        String serviceName = request.getServiceName() != null ? request.getServiceName() : request.getPodName();
+        String errorReason = request.getErrorReason() != null ? request.getErrorReason() : "MANUAL_ASYNC_TRIGGER";
+
+        var queueMsg = com.keepguard.ms_ai_guardian.infrastructure.messaging.dto.IncidentQueueMessage.builder()
+                .trackingId(UUID.randomUUID())
+                .namespace(namespace)
+                .podName(request.getPodName())
+                .serviceName(serviceName)
+                .errorReason(errorReason)
+                .forceSendEmail(request.isForceSendEmail())
+                .enqueuedTimestamp(System.currentTimeMillis())
+                .build();
+
+        rabbitTemplate.convertAndSend(
+                com.keepguard.ms_ai_guardian.infrastructure.messaging.RabbitMqTopologyConfig.GUARDIAN_INCIDENT_EXCHANGE,
+                com.keepguard.ms_ai_guardian.infrastructure.messaging.RabbitMqTopologyConfig.GUARDIAN_INCIDENT_ROUTING_KEY,
+                queueMsg
+        );
+
+        return ResponseEntity.accepted().body(queueMsg);
+    }
+
     @PostMapping("/diagnose")
-    @Operation(summary = "Acionar diagnóstico inteligente sob demanda para um Pod")
+    @Operation(summary = "Acionar diagnóstico inteligente sob demanda para um Pod (Síncrono)")
     public ResponseEntity<DiagnosticResultDTO> triggerDiagnosis(@RequestBody ManualDiagnoseRequestDTO request) {
         String namespace = request.getNamespace() != null ? request.getNamespace() : "keepguard";
         String serviceName = request.getServiceName() != null ? request.getServiceName() : request.getPodName();

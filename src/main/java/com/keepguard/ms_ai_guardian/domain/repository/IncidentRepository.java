@@ -14,6 +14,8 @@ public interface IncidentRepository extends JpaRepository<Incident, UUID> {
 
     List<Incident> findByNamespaceOrderByCreatedAtDesc(String namespace);
 
+    Optional<Incident> findFirstByFingerprintOrderByCreatedAtDesc(String fingerprint);
+
     // Para evitar tempestade de alertas: verifica se já houve um incidente recente para o mesmo pod/serviço
     Optional<Incident> findTopByPodNameAndCreatedAtAfterOrderByCreatedAtDesc(String podName, LocalDateTime after);
 

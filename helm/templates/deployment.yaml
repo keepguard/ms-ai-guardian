@@ -51,6 +51,11 @@ spec:
           value: {{ .Values.env.namespace | quote }}
         - name: APP_GUARDIAN_WATCHER_ENABLED
           value: {{ .Values.env.watcherEnabled | quote }}
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ms-ai-guardian-secret
+              key: GITHUB_TOKEN
         ports:
         - containerPort: {{ .Values.service.port }}
         resources:

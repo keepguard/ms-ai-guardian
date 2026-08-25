@@ -41,6 +41,9 @@ spring:
 app:
   kubernetes:
     kubeconfig-path: ""
+  github:
+    token: ${GITHUB_TOKEN:}
+    owner: keepguard
   guardian:
     namespace: keepguard
     watcher-enabled: true

@@ -31,6 +31,23 @@ public class KubernetesInspectorService {
         }
     }
 
+    public List<io.fabric8.kubernetes.api.model.apps.Deployment> listDeploymentsWithZeroReplicas(String namespace) {
+        try {
+            return k8sClient.apps().deployments().inNamespace(namespace).list().getItems().stream()
+                    .filter(d -> {
+                        Integer desired = d.getSpec() != null ? d.getSpec().getReplicas() : 1;
+                        Integer available = d.getStatus() != null && d.getStatus().getAvailableReplicas() != null
+                                ? d.getStatus().getAvailableReplicas() : 0;
+                        // Alerta se o deployment deveria ter réplicas mas tem 0 disponíveis, ou se foi explicitamente zerado
+                        return (desired != null && desired > 0 && available == 0) || (desired != null && desired == 0);
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Erro ao verificar deployments zerados no namespace {}: {}", namespace, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
     public boolean isPodUnhealthy(Pod pod) {
         if (pod.getStatus() == null) return false;
 
@@ -43,7 +60,6 @@ public class KubernetesInspectorService {
         if (pod.getStatus().getContainerStatuses() != null) {
             for (ContainerStatus status : pod.getStatus().getContainerStatuses()) {
                 if (status.getRestartCount() != null && status.getRestartCount() > 0) {
-                    // Se estiver com restart recente
                     return true;
                 }
                 if (status.getState() != null) {
@@ -65,6 +81,15 @@ public class KubernetesInspectorService {
                 }
             }
         }
+
+        // Inspeciona se há logs com PANIC RECOVER ou NullPointerException recentes
+        if ("Running".equalsIgnoreCase(phase)) {
+            String logs = getPodLogs(pod.getMetadata().getNamespace(), pod.getMetadata().getName(), 25);
+            if (logs.contains("PANIC RECOVER") || logs.contains("NullPointerException") || logs.contains("BadSqlGrammarException")) {
+                return true;
+            }
+        }
+
         return false;
     }
 

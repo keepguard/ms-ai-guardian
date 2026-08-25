@@ -27,6 +27,9 @@ public class AiDiagnosticService {
     private final KubernetesInspectorService k8sInspector;
     private final IncidentRepository incidentRepository;
     private final EmailNotificationService emailNotificationService;
+    private final com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService businessAnalystAgentService;
+    private final Optional<com.keepguard.ms_ai_guardian.application.service.agents.CoderAgentService> coderAgentService;
+    private final Optional<com.keepguard.ms_ai_guardian.application.service.agents.ReviewerAgentService> reviewerAgentService;
     private final Optional<ChatClient.Builder> chatClientBuilder;
 
     @Value("${app.guardian.anti-flapping-cooldown-minutes:15}")
@@ -62,38 +65,69 @@ public class AiDiagnosticService {
             }
         }
 
-        // 2. Coleta de Evidências do Kubernetes
+        // 2. Coleta de Logs e Eventos do Pod
         String podHealth = k8sInspector.describePodHealth(namespace, podName);
         String recentLogs = k8sInspector.getPodLogs(namespace, podName, 80);
         List<String> warningEvents = k8sInspector.getRecentWarningEvents(namespace, podName);
 
-        // 3. Execução do Raciocínio com IA (Ollama / Fallback Heurístico)
-        String aiResponse = executeAiReasoning(serviceName, podName, errorReason, podHealth, recentLogs, warningEvents);
-
-        // 4. Parse do Diagnóstico e Severidade
+        // 3. Avaliação da Severidade
         IncidentSeverity severity = evaluateSeverity(errorReason, recentLogs, podHealth);
+
+        // 4. GERAÇÃO DE FINGERPRINT / ASSINATURA ÚNICA DO ERRO
+        String fingerprint = generateIncidentFingerprint(serviceName, errorReason, recentLogs);
+
+        // 5. Deduplicação e Agrupamento por Fingerprint
+        Optional<Incident> existingIncidentOpt = incidentRepository.findFirstByFingerprintOrderByCreatedAtDesc(fingerprint);
+        if (existingIncidentOpt.isPresent()) {
+            Incident existingIncident = existingIncidentOpt.get();
+            existingIncident.setOccurrencesCount(existingIncident.getOccurrencesCount() + 1);
+            existingIncident.setLastSeenAt(LocalDateTime.now());
+            incidentRepository.save(existingIncident);
+
+            log.info("🛡️ [Incident Deduplication] Incidente já rastreado para o fingerprint '{}' (ID: {}). Ocorrência #{} incrementada sem criar novo PR ou spam de e-mails.",
+                    fingerprint, existingIncident.getId(), existingIncident.getOccurrencesCount());
+
+            return DiagnosticResultDTO.builder()
+                    .incidentId(existingIncident.getId())
+                    .podName(existingIncident.getPodName())
+                    .namespace(existingIncident.getNamespace())
+                    .serviceName(existingIncident.getServiceName())
+                    .severity(existingIncident.getSeverity())
+                    .errorReason(existingIncident.getErrorReason())
+                    .rootCause(existingIncident.getAiRootCauseAnalysis())
+                    .recommendedAction(existingIncident.getAiRecommendedAction())
+                    .technicalDetails(warningEvents)
+                    .notificationSent(false)
+                    .build();
+        }
+
+        // 6. Diagnóstico com IA para novo incidente
+        String aiResponse = executeAiReasoning(serviceName, podName, errorReason, podHealth, recentLogs, warningEvents);
         String[] parsedAnalysis = parseAiAnalysis(aiResponse);
         String rootCause = parsedAnalysis[0];
         String recommendedAction = parsedAnalysis[1];
 
-        // 5. Persistência no Banco de Dados (Schema ms_ai_guardian)
+        // 7. Persistência do Novo Incidente
         Incident incident = Incident.builder()
-                .namespace(namespace)
                 .podName(podName)
+                .namespace(namespace)
                 .serviceName(serviceName)
-                .errorReason(errorReason != null ? errorReason : "UNKNOWN_ERROR")
                 .severity(severity)
-                .status(IncidentStatus.DIAGNOSED)
-                .capturedLogsSnippet(recentLogs.length() > 4000 ? recentLogs.substring(0, 4000) : recentLogs)
+                .errorReason(errorReason)
+                .fingerprint(fingerprint)
+                .occurrencesCount(1)
+                .lastSeenAt(LocalDateTime.now())
+                .capturedLogsSnippet(recentLogs.length() > 3000 ? recentLogs.substring(recentLogs.length() - 3000) : recentLogs)
                 .aiRootCauseAnalysis(rootCause)
                 .aiRecommendedAction(recommendedAction)
+                .status(IncidentStatus.DETECTED)
                 .targetRecipientEmail(defaultRecipient)
                 .notificationSent(false)
                 .build();
 
         incident = incidentRepository.save(incident);
 
-        // 6. Monta DTO de Resposta
+        // 8. Monta DTO de Resposta
         DiagnosticResultDTO resultDTO = DiagnosticResultDTO.builder()
                 .incidentId(incident.getId())
                 .podName(podName)
@@ -107,7 +141,22 @@ public class AiDiagnosticService {
                 .notificationSent(false)
                 .build();
 
-        // 7. Envio do E-mail de Diagnóstico
+        // 9. 👔 CONSULTA AO BUSINESS ANALYST AGENT: Avalia se é falha de dados/banco ou defeito de código
+        var businessVerdict = businessAnalystAgentService.evaluateIncident(resultDTO, recentLogs);
+
+        // Se for inconsistência de banco/cadastro -> NÃO cria PR de código e envia relatório funcional
+        if (!businessVerdict.requiresCodePr()) {
+            log.info("👔 [BusinessAnalystAgent] Falha classificada como {}. NÃO será aberto PR de código.", businessVerdict.type());
+            emailNotificationService.sendDataInconsistencyEmail(
+                    serviceName,
+                    businessVerdict.summary(),
+                    businessVerdict.businessContext(),
+                    businessVerdict.suggestedSqlAction()
+            );
+            return resultDTO;
+        }
+
+        // 10. Envio do E-mail de Diagnóstico Padrão de Engenharia
         boolean emailSent = emailNotificationService.sendIncidentDiagnosticEmail(resultDTO);
         if (emailSent) {
             incident.setStatus(IncidentStatus.NOTIFIED);
@@ -117,8 +166,40 @@ public class AiDiagnosticService {
             resultDTO.setNotificationSent(true);
         }
 
+        // 11. 🤖 Acionamento da Squad Autônoma (CoderAgent + ArchitectAgent + QaAgent + ReviewerAgent)
+        if (coderAgentService.isPresent() && reviewerAgentService.isPresent() && !serviceName.contains("deployment") && !serviceName.contains("busybox")) {
+            try {
+                log.info("🛠️ Acionando CoderAgent para criar branch e Pull Request rico de hotfix...");
+                String filePath = "src/main/resources/application.yml";
+                if ("mock-sms-gateway".equalsIgnoreCase(serviceName)) {
+                    filePath = "internal/core/service/sms_service.go";
+                }
+                var prOpt = coderAgentService.get().createHotfixPullRequest(resultDTO, filePath, recentLogs, businessVerdict);
+                prOpt.ifPresent(reviewerAgentService.get()::performReview);
+            } catch (Exception e) {
+                log.error("Falha ao executar pipeline Multi-Agent de hotfix: {}", e.getMessage());
+            }
+        }
+
         log.info("✅ Diagnóstico concluído com sucesso para pod: {} | E-mail enviado: {}", podName, emailSent);
         return resultDTO;
+    }
+
+    private String generateIncidentFingerprint(String serviceName, String errorReason, String recentLogs) {
+        String normalizedError = errorReason != null ? errorReason.trim().toLowerCase() : "unknown";
+        String normalizedService = serviceName != null ? serviceName.trim().toLowerCase() : "unknown";
+        
+        // Identifica a linha de erro/função no log se disponível
+        String location = "general";
+        if (recentLogs != null && recentLogs.contains("sms_handler.go")) {
+            location = "sms_handler.go:CalculateDiscountRate";
+        } else if (recentLogs != null && recentLogs.contains("NullPointerException")) {
+            location = "NullPointerException";
+        }
+
+        return org.springframework.util.DigestUtils.md5DigestAsHex(
+                (normalizedService + ":" + normalizedError + ":" + location).getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
     }
 
     private String executeAiReasoning(String serviceName, String podName, String errorReason,
@@ -175,45 +256,15 @@ public class AiDiagnosticService {
     }
 
     private String generateHeuristicAnalysis(String serviceName, String errorReason, String logs, String podHealth) {
-        if (logs.contains("HikariPool") || logs.contains("Connection refused") || logs.contains("PostgreSQL")) {
-            return """
-                [CAUSA_RAIZ]
-                Falha de conexão com o banco de dados PostgreSQL. O pool de conexões (HikariCP) não conseguiu obter novas conexões ou houve esgotamento das conexões simultâneas configuradas.
-                [PLANO_DE_ACAO]
-                1. Verificar o status do pod do PostgreSQL (kubectl get pod postgres -n keepguard).
-                2. Checar as credenciais e limites de conexões máximas no application.yml (spring.datasource.hikari.maximum-pool-size).
-                3. Analisar se há queries lentas bloqueando as conexões ativas.
-                """;
-        }
-
-        if (podHealth.contains("OOMKilled") || logs.contains("OutOfMemoryError") || podHealth.contains("Exit Code: 137")) {
-            return """
-                [CAUSA_RAIZ]
-                O container foi encerrado pelo kernel do Kubernetes por estouro do limite de memória (OOMKilled - Exit Code 137). A JVM atingiu o teto de RAM alocado no Helm deployment.
-                [PLANO_DE_ACAO]
-                1. Aumentar o limite de memória no values.yaml do microsserviço (resources.limits.memory).
-                2. Ajustar os parâmetros de heap da JVM (-XX:MaxRAMPercentage=75.0).
-                3. Verificar possíveis vazamentos de memória ou payloads excessivos na requisição.
-                """;
-        }
-
-        if (logs.contains("RedisConnectionException") || logs.contains("RedisURIs must not be empty")) {
-            return """
-                [CAUSA_RAIZ]
-                Erro na inicialização do cliente Lettuce/Redis. O microsserviço tentou conectar a um nó de Redis inexistente ou com profile incompatível.
-                [PLANO_DE_ACAO]
-                1. Verificar as variáveis SPRING_DATA_REDIS_HOST e SPRING_DATA_REDIS_PORT no Helm.
-                2. Garantir que a variável spring.data.redis.cluster.nodes não esteja populada incorretamente.
-                """;
-        }
+        String cause = (errorReason != null && !errorReason.isBlank()) ? errorReason : "Instabilidade detectada nos logs da aplicação";
 
         return """
             [CAUSA_RAIZ]
-            Instabilidade ou reinicialização detectada no container durante a execução do processo.
+            %s no microsserviço %s.
             [PLANO_DE_ACAO]
-            1. Inspecionar logs completos do container usando: kubectl logs %s -n keepguard --previous.
-            2. Validar se as variáveis de ambiente e secrets compartilhados estão sincronizados.
-            """.formatted(serviceName);
+            1. Inspecionar logs e rastreabilidade da requisição no pod %s.
+            2. Analisar o fluxo de execução e aplicar patch defensivo ou regularização de dados.
+            """.formatted(cause, serviceName, serviceName);
     }
 
     private String[] parseAiAnalysis(String rawResponse) {
@@ -236,7 +287,10 @@ public class AiDiagnosticService {
         if (podHealth.contains("OOMKilled") || logs.contains("OutOfMemoryError") || "CrashLoopBackOff".equalsIgnoreCase(errorReason)) {
             return IncidentSeverity.CRITICAL;
         }
-        if (logs.contains("Connection refused") || logs.contains("HikariPool")) {
+        if (logs.contains("Connection refused") || logs.contains("HikariPool") || logs.contains("PSQLException")) {
+            return IncidentSeverity.HIGH;
+        }
+        if (logs.contains("NullPointerException") || logs.contains("FeignException")) {
             return IncidentSeverity.HIGH;
         }
         return IncidentSeverity.MEDIUM;
