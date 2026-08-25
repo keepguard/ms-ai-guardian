@@ -19,6 +19,10 @@ import java.util.UUID;
 public class EmailNotificationService {
 
     private final RabbitTemplate rabbitTemplate;
+    private final org.springframework.web.client.RestClient restClient = org.springframework.web.client.RestClient.create();
+
+    @Value("${app.communication.url:http://ms-communication:8082}")
+    private String communicationUrl;
 
     @Value("${app.rabbitmq.exchange:ms-communication-exchange-dev}")
     private String exchange;
@@ -33,40 +37,51 @@ public class EmailNotificationService {
     private String defaultTenantId;
 
     public boolean sendIncidentDiagnosticEmail(DiagnosticResultDTO result) {
+        String recipient = defaultRecipient;
+        String subject = String.format("🚨 [KeepGuard AI Guardian] Incidente: %s (%s)",
+                result.getServiceName(), result.getSeverity());
+
+        String htmlBody = buildHtmlReport(result);
+
+        Map<String, Object> messagePayload = new HashMap<>();
+        messagePayload.put("tenantId", defaultTenantId);
+        messagePayload.put("xCorrelationId", UUID.randomUUID().toString());
+        messagePayload.put("messageType", "EMAIL");
+        messagePayload.put("recipient", recipient);
+        messagePayload.put("templateType", "ALERTA_SEGURANCA");
+        messagePayload.put("subject", subject);
+        messagePayload.put("communicationType", "EMAIL");
+        messagePayload.put("codeUser", "ADMIN_GUARDIAN");
+
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("serviceName", result.getServiceName());
+        variables.put("severity", result.getSeverity().name());
+        variables.put("diagnosticReportHtml", htmlBody);
+        messagePayload.put("variables", variables);
+
+        // 1. Tenta envio direto via API REST do ms-communication (HTTP)
         try {
-            String recipient = defaultRecipient;
-            String subject = String.format("🚨 [KeepGuard AI Guardian] Incidente: %s (%s)",
-                    result.getServiceName(), result.getSeverity());
+            log.info("Tentando envio direto via HTTP ms-communication para {} | Pod: {}", recipient, result.getPodName());
+            restClient.post()
+                    .uri(communicationUrl + "/api/v1/messages/send")
+                    .header("X-Tenant-Id", defaultTenantId)
+                    .header("Content-Type", "application/json")
+                    .body(messagePayload)
+                    .retrieve()
+                    .toBodilessEntity();
 
-            String htmlBody = buildHtmlReport(result);
-
-            // Payload 100% aderente ao MessageSendRabbitMQDTO do ms-communication
-            Map<String, Object> messagePayload = new HashMap<>();
-            messagePayload.put("tenantId", defaultTenantId);
-            messagePayload.put("xCorrelationId", UUID.randomUUID().toString());
-            messagePayload.put("messageType", "SYSTEM_NOTIFICATION");
-            messagePayload.put("recipient", recipient);
-            messagePayload.put("templateType", "CADASTRO_SUCESSO"); // Template registrado
-            messagePayload.put("subject", subject);
-            messagePayload.put("content", htmlBody.length() > 950 ? htmlBody.substring(0, 950) : htmlBody);
-            messagePayload.put("communicationType", "IMMEDIATE");
-            messagePayload.put("codeUser", "ADMIN_GUARDIAN");
-
-            Map<String, Object> variables = new HashMap<>();
-            variables.put("userName", "Rafael Soares");
-            variables.put("appName", "KeepGuard AI Guardian");
-            variables.put("serviceName", result.getServiceName());
-            variables.put("podName", result.getPodName());
-            variables.put("severity", result.getSeverity().name());
-            variables.put("errorReason", result.getErrorReason());
-            variables.put("rootCause", result.getRootCause());
-            variables.put("recommendedAction", result.getRecommendedAction());
-            messagePayload.put("variables", variables);
-
-            log.info("Publicando e-mail de diagnóstico via ms-communication para {} | Pod: {}", recipient, result.getPodName());
-            rabbitTemplate.convertAndSend(exchange, routingKey, messagePayload);
+            log.info("✅ E-mail de incidente enviado com sucesso via ms-communication HTTP para {}", recipient);
             return true;
 
+        } catch (Exception httpEx) {
+            log.warn("Falha no envio HTTP ({}), tentando fallback via fila RabbitMQ...", httpEx.getMessage());
+        }
+
+        // 2. Fallback via RabbitMQ
+        try {
+            log.info("Publicando e-mail de diagnóstico via RabbitMQ para {} | Pod: {}", recipient, result.getPodName());
+            rabbitTemplate.convertAndSend(exchange, routingKey, messagePayload);
+            return true;
         } catch (Exception e) {
             log.error("Falha ao publicar e-mail de incidente no RabbitMQ: {}", e.getMessage(), e);
             return false;
