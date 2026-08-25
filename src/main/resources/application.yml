@@ -27,7 +27,7 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   ai:
     ollama:
-      base-url: http://localhost:11434
+      base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://ollama:11434}
       chat:
         options:
           model: deepseek-r1:latest
