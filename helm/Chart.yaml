@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ms-ai-guardian
+description: Helm Chart para o Microsserviço de Diagnóstico Inteligente ms-ai-guardian do KeepGuard
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

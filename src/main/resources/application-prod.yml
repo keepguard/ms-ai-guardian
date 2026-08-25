@@ -1,0 +1,14 @@
+server:
+  port: 8088
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/keepguard_api_db
+    username: keepguard_api_user
+    password: keepguard_api_pass
+  rabbitmq:
+    host: rabbitmq-service
+    port: 5672
+  ai:
+    ollama:
+      base-url: http://ollama:11434

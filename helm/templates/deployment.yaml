@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-ai-guardian
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: ms-ai-guardian
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ms-ai-guardian
+  template:
+    metadata:
+      labels:
+        app: ms-ai-guardian
+    spec:
+      serviceAccountName: ms-ai-guardian-sa
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: ms-ai-guardian
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: {{ .Values.env.springProfilesActive | quote }}
+        - name: SERVER_PORT
+          value: {{ .Values.env.serverPort | quote }}
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://postgres:5432/{{ .Values.env.postgresDb }}"
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            configMapKeyRef:
+              name: keepguard-config
+              key: POSTGRES_USER
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keepguard-secret
+              key: POSTGRES_PASSWORD
+        - name: SPRING_RABBITMQ_HOST
+          value: {{ .Values.env.rabbitmqHost | quote }}
+        - name: SPRING_RABBITMQ_PORT
+          value: {{ .Values.env.rabbitmqPort | quote }}
+        - name: APP_GUARDIAN_DEFAULT_RECIPIENT
+          value: {{ .Values.env.defaultRecipient | quote }}
+        - name: APP_GUARDIAN_NAMESPACE
+          value: {{ .Values.env.namespace | quote }}
+        - name: APP_GUARDIAN_WATCHER_ENABLED
+          value: {{ .Values.env.watcherEnabled | quote }}
+        ports:
+        - containerPort: {{ .Values.service.port }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

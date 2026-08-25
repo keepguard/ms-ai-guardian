@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-ai-guardian
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: ms-ai-guardian
+spec:
+  selector:
+    app: ms-ai-guardian
+  ports:
+  - port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.port }}
