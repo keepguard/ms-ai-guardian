@@ -49,4 +49,53 @@ public class RabbitMqTopologyConfig {
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }
+
+    @Bean
+    public org.springframework.amqp.rabbit.retry.MessageRecoverer customMessageRecoverer(
+            org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate) {
+        
+        var recoverer = new org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer(
+                rabbitTemplate,
+                GUARDIAN_INCIDENT_EXCHANGE,
+                GUARDIAN_INCIDENT_DLQ_ROUTING_KEY
+        );
+
+        // Enriquecimento com cabeçalhos forenses de alta rastreabilidade
+        recoverer.setHeaderNames(
+                "x-exception-message",
+                "x-exception-stacktrace",
+                "x-original-queue"
+        );
+        return recoverer;
+    }
+
+    @Bean
+    public org.springframework.amqp.rabbit.listener.RabbitListenerContainerFactory<?> rabbitListenerContainerFactory(
+            org.springframework.amqp.rabbit.connection.ConnectionFactory connectionFactory,
+            MessageConverter messageConverter,
+            org.springframework.amqp.rabbit.retry.MessageRecoverer customMessageRecoverer) {
+        
+        var factory = new org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(messageConverter);
+        
+        // Configura interceptor de retry resiliente com backoff exponencial
+        var retryTemplate = new org.springframework.retry.support.RetryTemplate();
+        var backOffPolicy = new org.springframework.retry.backoff.ExponentialBackOffPolicy();
+        backOffPolicy.setInitialInterval(1000);
+        backOffPolicy.setMultiplier(2.0);
+        backOffPolicy.setMaxInterval(5000);
+        retryTemplate.setBackOffPolicy(backOffPolicy);
+
+        var retryPolicy = new org.springframework.retry.policy.SimpleRetryPolicy(3);
+        retryTemplate.setRetryPolicy(retryPolicy);
+
+        var advice = org.springframework.amqp.rabbit.config.RetryInterceptorBuilder.stateless()
+                .retryOperations(retryTemplate)
+                .recoverer(customMessageRecoverer)
+                .build();
+
+        factory.setAdviceChain(advice);
+        return factory;
+    }
 }
