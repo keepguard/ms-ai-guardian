@@ -32,7 +32,9 @@ public class RabbitMqTopologyConfig {
 
     @Bean
     public Queue guardianIncidentDlq() {
-        return QueueBuilder.durable(GUARDIAN_INCIDENT_DLQ).build();
+        return QueueBuilder.durable(GUARDIAN_INCIDENT_DLQ)
+                .withArgument("x-message-ttl", 604800000)
+                .build();
     }
 
     @Bean
