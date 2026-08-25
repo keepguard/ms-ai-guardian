@@ -56,19 +56,11 @@ public class RabbitMqTopologyConfig {
     public org.springframework.amqp.rabbit.retry.MessageRecoverer customMessageRecoverer(
             org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate) {
         
-        var recoverer = new org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer(
+        return new org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer(
                 rabbitTemplate,
                 GUARDIAN_INCIDENT_EXCHANGE,
                 GUARDIAN_INCIDENT_DLQ_ROUTING_KEY
         );
-
-        // Enriquecimento com cabeçalhos forenses de alta rastreabilidade
-        recoverer.setHeaderNames(
-                "x-exception-message",
-                "x-exception-stacktrace",
-                "x-original-queue"
-        );
-        return recoverer;
     }
 
     @Bean
