@@ -62,3 +62,5 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+
+// [KeepGuard AI Guardian]: Patch de resiliência preventiva.
