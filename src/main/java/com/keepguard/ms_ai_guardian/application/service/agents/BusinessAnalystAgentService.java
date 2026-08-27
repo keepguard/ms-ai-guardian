@@ -30,8 +30,31 @@ public class BusinessAnalystAgentService {
         log.info("👔 [BusinessAnalystAgent] Analisando impacto e consistência de negócio para: {} (Erro: {})",
                 incident.getServiceName(), incident.getErrorReason());
 
-        String errorLower = incident.getErrorReason().toLowerCase();
+        String errorLower = incident.getErrorReason() != null ? incident.getErrorReason().toLowerCase() : "";
         String logsLower = recentLogs != null ? recentLogs.toLowerCase() : "";
+
+        // 0. Verificação de Falhas de Infraestrutura / Kubernetes / Deployment / Imagem / Pod LifeCycle
+        if (errorLower.contains("pending") || errorLower.contains("imagepullbackoff") 
+                || errorLower.contains("errimagepull") || errorLower.contains("containercreating")
+                || errorLower.contains("createcontainerconfigerror") || errorLower.contains("oomkilled")
+                || errorLower.contains("service_outage_zero_replicas") || errorLower.contains("restart_or_failure_detected")
+                || logsLower.contains("failed to pull and unpack image") || logsLower.contains("no match for platform in manifest")
+                || logsLower.contains("connection refused") || logsLower.contains("dial tcp")) {
+
+            String infraExplanation = """
+                ⚙️ **Incidente de Infraestrutura / Deploy / Orquestração Kubernetes**:
+                O Pod/Container apresentou anomalia a nível de cluster, imagem Docker ou agendamento (ex: %s).
+                Não há evidências de defeito na lógica interna da aplicação. Esta falha requer intervenção SRE/DevOps.
+                """.formatted(incident.getErrorReason());
+
+            return new BusinessVerdict(
+                    VerdictType.INFRASTRUCTURE_FAULT,
+                    "Falha operacional de infraestrutura / deploy (" + incident.getErrorReason() + ")",
+                    infraExplanation,
+                    "-- Inspecionar kubectl describe pod / imagens no GHCR / recursos do nó",
+                    false // NUNCA deve abrir PR de código!
+            );
+        }
 
         // 1. Verificação de Inconsistência de Dados Cadastrais / Falha Operacional de Banco
         if (logsLower.contains("autenticar tenant") || logsLower.contains("empresa/tenant não encontrado") 
@@ -154,6 +177,7 @@ public class BusinessAnalystAgentService {
     }
 
     public enum VerdictType {
+        INFRASTRUCTURE_FAULT,
         DATA_INCONSISTENCY,
         BUSINESS_RULE_VIOLATION,
         CODE_DEFECT

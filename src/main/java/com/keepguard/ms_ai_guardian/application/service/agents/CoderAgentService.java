@@ -279,11 +279,9 @@ public class CoderAgentService {
             }
         }
 
-        if (incident.getErrorReason() != null && incident.getErrorReason().contains("NullPointerException")) {
-            return currentCode + "\n// [KeepGuard AI Guardian Hotfix]: Adicionada proteção contra NullPointerException.\n";
-        }
-
-        return currentCode + "\n// [KeepGuard AI Guardian]: Patch de resiliência preventiva.\n";
+        // Se não houver alteração substantiva e identificada, retorna o código inalterado para abortar o PR
+        log.warn("⚠️ [CoderAgent] Nenhuma regra de correção aplicável encontrada para o incidente {}. PR abortado.", incident.getErrorReason());
+        return currentCode;
     }
 
     private String generateIterativeAdjustmentWithAi(String currentCode, String feedback) {

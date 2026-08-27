@@ -428,6 +428,68 @@ public class EmailNotificationService {
         return sendGenericEmail(subject, html, serviceName);
     }
 
+    public boolean sendInfrastructureAlertEmail(
+            String serviceName,
+            String summary,
+            String context,
+            String suggestedAction) {
+
+        String subject = String.format("⚙️ [KeepGuard AI Guardian] Alerta Operacional / Infraestrutura em %s", serviceName);
+
+        String html = String.format("""
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+              <meta charset="UTF-8">
+              <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+                .card { max-width: 650px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; border: 1px solid #e2e8f0; }
+                .header { background: #475569; color: #ffffff; padding: 24px; text-align: left; }
+                .header h1 { margin: 0 0 6px 0; font-size: 20px; font-weight: 700; }
+                .content { padding: 24px; font-size: 14px; line-height: 1.6; }
+                .box { background: #f1f5f9; border-left: 4px solid #64748b; padding: 14px 16px; margin: 14px 0; border-radius: 0 6px 6px 0; }
+                .footer { background: #f1f5f9; padding: 16px; text-align: center; font-size: 12px; color: #64748b; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="header">
+                  <h1>⚙️ Incidente de Infraestrutura / Orquestração K8s</h1>
+                  <p>Serviço: %s • Diagnóstico SRE / DevOps</p>
+                </div>
+                <div class="content">
+                  <p>Olá Rafael,</p>
+                  <p>O <strong>AI Guardian</strong> detectou um evento operacional a nível de container/Kubernetes no serviço <strong>%s</strong>.</p>
+                  
+                  <div class="box">
+                    <strong>Diagnóstico:</strong> %s<br/><br/>
+                    <strong>Contexto Operacional:</strong><br/>
+                    %s
+                  </div>
+
+                  <p>🛡️ <strong>Ação do Sistema:</strong> Este incidente foi classificado como falha de infraestrutura/deploy. Nenhum Pull Request de código-fonte foi gerado desnecessariamente.</p>
+
+                  <p><strong>Ação Recomendada:</strong></p>
+                  <div style="background: #1e293b; color: #f8fafc; padding: 12px 16px; border-radius: 6px; font-family: monospace; font-size: 13px;">
+                    %s
+                  </div>
+                </div>
+                <div class="footer">
+                  KeepGuard Multi-Agent System • SRE & Infrastructure Intelligence
+                </div>
+              </div>
+            </body>
+            </html>
+            """,
+                serviceName, serviceName,
+                summary,
+                context.replace("\n", "<br/>"),
+                suggestedAction
+        );
+
+        return sendGenericEmail(subject, html, serviceName);
+    }
+
     private boolean sendGenericEmail(String subject, String htmlBody, String serviceName) {
         Map<String, Object> messagePayload = new HashMap<>();
         messagePayload.put("tenantId", defaultTenantId);

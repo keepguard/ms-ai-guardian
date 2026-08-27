@@ -7,6 +7,8 @@ import com.keepguard.ms_ai_guardian.domain.entity.Incident;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentSeverity;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentStatus;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
+import com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService;
+import com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService.VerdictType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -141,8 +143,20 @@ public class AiDiagnosticService {
                 .notificationSent(false)
                 .build();
 
-        // 9. 👔 CONSULTA AO BUSINESS ANALYST AGENT: Avalia se é falha de dados/banco ou defeito de código
+        // 9. 👔 CONSULTA AO BUSINESS ANALYST AGENT: Avalia se é infraestrutura/deploy, inconsistência de dados ou defeito de código
         var businessVerdict = businessAnalystAgentService.evaluateIncident(resultDTO, recentLogs);
+
+        // Se for falha de infraestrutura/deploy -> NÃO cria PR de código e envia relatório SRE
+        if (businessVerdict.type() == VerdictType.INFRASTRUCTURE_FAULT) {
+            log.info("⚙️ [BusinessAnalystAgent] Falha classificada como INFRASTRUCTURE_FAULT. NÃO será aberto PR de código.");
+            emailNotificationService.sendInfrastructureAlertEmail(
+                    serviceName,
+                    businessVerdict.summary(),
+                    businessVerdict.businessContext(),
+                    businessVerdict.suggestedSqlAction()
+            );
+            return resultDTO;
+        }
 
         // Se for inconsistência de banco/cadastro -> NÃO cria PR de código e envia relatório funcional
         if (!businessVerdict.requiresCodePr()) {
