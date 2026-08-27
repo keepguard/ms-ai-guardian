@@ -114,6 +114,86 @@ public class EmailNotificationService {
         );
     }
 
+    /**
+     * Segundo e-mail do fluxo CODE_DEFECT: dispara assim que o CoderAgent abre o PR,
+     * independente do parecer do ReviewerAgent.
+     */
+    public boolean sendPrOpenedEmail(com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle pr,
+            DiagnosticResultDTO incident) {
+        String prUrl = pr.getPrUrl() != null ? pr.getPrUrl()
+                : "https://github.com/keepguard/" + pr.getRepoName() + "/pull/" + pr.getPrNumber();
+        String subject = String.format("🛠️ [AI Guardian] PR #%d aberto: %s", pr.getPrNumber(), pr.getRepoName());
+
+        String html = String.format("""
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+              <meta charset="UTF-8">
+              <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
+                .card { max-width: 650px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; border: 1px solid #e2e8f0; }
+                .header { background: #0f766e; color: #ffffff; padding: 24px; text-align: left; }
+                .header h1 { margin: 0 0 6px 0; font-size: 20px; font-weight: 700; }
+                .header p { margin: 0; opacity: 0.9; font-size: 13px; }
+                .content { padding: 24px; }
+                .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: #f1f5f9; color: #334155; margin: 0 6px 8px 0; }
+                .section-title { font-size: 14px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-top: 16px; margin-bottom: 8px; letter-spacing: 0.5px; }
+                .box { background: #f8fafc; border-left: 4px solid #0f766e; padding: 14px 16px; border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.6; margin-bottom: 12px; }
+                .btn { display: inline-block; padding: 12px 24px; background: #0f766e; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 700; margin-top: 8px; }
+                .footer { background: #f1f5f9; padding: 16px; text-align: center; font-size: 12px; color: #64748b; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="header">
+                  <h1>🛠️ CoderAgent abriu um Pull Request</h1>
+                  <p>Hotfix gerado a partir do diagnóstico do incidente</p>
+                </div>
+                <div class="content">
+                  <div>
+                    <span class="badge">Serviço: <strong>%s</strong></span>
+                    <span class="badge">PR <strong>#%d</strong></span>
+                    <span class="badge">Branch: <strong>%s</strong></span>
+                  </div>
+
+                  <div class="section-title">Incidente</div>
+                  <div class="box">
+                    <strong>Erro:</strong> %s<br/>
+                    <strong>Causa raiz:</strong> %s<br/>
+                    <strong>Arquivo:</strong> %s
+                  </div>
+
+                  <div class="section-title">Ação recomendada</div>
+                  <div class="box">%s</div>
+
+                  <p>O ReviewerAgent segue a análise no GitHub. Para revisar o diff e fazer o merge:</p>
+                  <a href="%s" class="btn" target="_blank">🔗 Abrir Pull Request #%d</a>
+                </div>
+                <div class="footer">
+                  KeepGuard Multi-Agent System • Diagnóstico → PR → Review humano
+                </div>
+              </div>
+            </body>
+            </html>
+            """,
+                pr.getRepoName(),
+                pr.getPrNumber(),
+                pr.getBranchName() != null ? pr.getBranchName() : "—",
+                nvl(incident != null ? incident.getErrorReason() : null),
+                nvl(incident != null ? incident.getRootCause() : null).replace("\n", "<br/>"),
+                pr.getFilePath() != null ? pr.getFilePath() : "—",
+                nvl(incident != null ? incident.getRecommendedAction() : null).replace("\n", "<br/>"),
+                prUrl,
+                pr.getPrNumber()
+        );
+
+        return sendGenericEmail(subject, html, pr.getRepoName());
+    }
+
+    private static String nvl(String value) {
+        return value == null || value.isBlank() ? "—" : value;
+    }
+
     public boolean sendPrReadyForHumanApprovalEmail(com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle pr, String aiFeedback) {
         String recipient = defaultRecipient;
         String subject = String.format("🤖 [AI Guardian Review] PR #%d Pronto para sua Aprovação (%s)", pr.getPrNumber(), pr.getRepoName());

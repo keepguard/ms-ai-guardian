@@ -53,7 +53,7 @@ spring:
       chat:
         enabled: ${APP_GUARDIAN_OPENAI_ENABLED:false}
         options:
-          model: ${SPRING_AI_OPENAI_MODEL:gpt-4o-mini}
+          model: ${SPRING_AI_OPENAI_MODEL:gpt-4.1-mini}
           temperature: ${APP_GUARDIAN_LLM_TEMPERATURE:0.2}
           max-tokens: ${APP_GUARDIAN_LLM_MAX_TOKENS:256}
     anthropic:

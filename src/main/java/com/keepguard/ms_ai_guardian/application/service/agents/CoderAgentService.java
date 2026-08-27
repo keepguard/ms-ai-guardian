@@ -144,6 +144,11 @@ public class CoderAgentService {
 
             savePrState(lifecycle);
             log.info("✅ [CoderAgent] Pull Request #{} aberto com sucesso: {}", prNumber, prUrl);
+            try {
+                emailNotificationService.sendPrOpenedEmail(lifecycle, incident);
+            } catch (Exception mailEx) {
+                log.warn("PR #{} aberto, mas o e-mail de notificação falhou: {}", prNumber, mailEx.getMessage());
+            }
             return Optional.of(lifecycle);
 
         } catch (Exception e) {

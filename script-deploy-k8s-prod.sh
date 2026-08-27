@@ -77,7 +77,7 @@ if kubectl get secret keepguard-openai -n "${NAMESPACE}" >/dev/null 2>&1; then
     APP_GUARDIAN_LLM_PROVIDER=openai \
     APP_GUARDIAN_OLLAMA_ENABLED=false \
     APP_GUARDIAN_OPENAI_ENABLED=true \
-    SPRING_AI_OPENAI_MODEL=gpt-4o-mini
+    SPRING_AI_OPENAI_MODEL=gpt-4.1-mini
 else
   echo -e "${YELLOW}⚙️  LLM: Ollama (secret keepguard-openai ausente)${NC}"
   kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
