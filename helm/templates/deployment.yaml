@@ -29,6 +29,8 @@ spec:
           value: {{ .Values.env.springProfilesActive | quote }}
         - name: SERVER_PORT
           value: {{ .Values.env.serverPort | quote }}
+        - name: JAVA_OPTS
+          value: {{ .Values.env.javaOpts | quote }}
         - name: SPRING_DATASOURCE_URL
           value: "jdbc:postgresql://postgres:5432/{{ .Values.env.postgresDb }}"
         - name: SPRING_DATASOURCE_USERNAME
@@ -51,6 +53,14 @@ spec:
           value: {{ .Values.env.namespace | quote }}
         - name: APP_GUARDIAN_WATCHER_ENABLED
           value: {{ .Values.env.watcherEnabled | quote }}
+        - name: APP_GUARDIAN_LLM_PROVIDER
+          value: {{ .Values.env.llmProvider | quote }}
+        - name: APP_GUARDIAN_OLLAMA_ENABLED
+          value: {{ .Values.env.ollamaEnabled | quote }}
+        - name: APP_GUARDIAN_OPENAI_ENABLED
+          value: {{ .Values.env.openaiEnabled | quote }}
+        - name: APP_GUARDIAN_ANTHROPIC_ENABLED
+          value: {{ .Values.env.anthropicEnabled | quote }}
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
@@ -60,3 +70,25 @@ spec:
         - containerPort: {{ .Values.service.port }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: {{ .Values.service.port }}
+          initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+          failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: {{ .Values.service.port }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: {{ .Values.service.port }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}

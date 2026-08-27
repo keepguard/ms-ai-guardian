@@ -6,14 +6,17 @@ image:
 service:
   port: 8088
 
+# 512Mi de limite + Xmx512m fazia GC eterno no boot. Irmãos Spring usam ~650Mi RSS / 1Gi.
 resources:
-  limits:
-    memory: 512Mi
   requests:
-    memory: 256Mi
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
 
 env:
-  springProfilesActive: local
+  springProfilesActive: prod
   serverPort: 8088
   postgresDb: "keepguard_api_db"
   postgresUser: "keepguard_api_user"
@@ -22,6 +25,27 @@ env:
   defaultRecipient: "rafael.nogueira2009@gmail.com"
   namespace: "keepguard"
   watcherEnabled: true
+  # Heap relativo ao cgroup (70% de 1Gi ≈ 700Mi). Nunca use -Xmx igual ao limit do pod.
+  javaOpts: "-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0 -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError"
+  llmProvider: "ollama"
+  ollamaEnabled: "true"
+  openaiEnabled: "false"
+  anthropicEnabled: "false"
+
+probes:
+  startup:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    failureThreshold: 36
+    timeoutSeconds: 3
+  liveness:
+    periodSeconds: 20
+    failureThreshold: 3
+    timeoutSeconds: 3
+  readiness:
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
 
 imagePullSecrets:
   - name: ghcr-secret

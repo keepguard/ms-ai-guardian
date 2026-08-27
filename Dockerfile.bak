@@ -6,5 +6,5 @@ COPY target/ms-ai-guardian-*.jar app.jar
 RUN chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8088
-ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport"
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0 -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError"
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

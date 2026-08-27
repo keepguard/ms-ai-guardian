@@ -43,11 +43,11 @@ spec:
           value: "24h"
         resources:
           requests:
-            memory: "2Gi"
-            cpu: "1000m"
+            memory: "1536Mi"
+            cpu: "500m"
           limits:
-            memory: "6Gi"
-            cpu: "4000m"
+            memory: "3Gi"
+            cpu: "1500m"
         startupProbe:
           httpGet:
             path: /api/version

@@ -89,7 +89,7 @@ public class KubernetesHealthWatcherScheduler {
     }
 
     // Executa a cada 60 segundos buscando anomalias no cluster
-    @Scheduled(fixedDelayString = "${app.guardian.scan-interval-ms:60000}", initialDelay = 15000)
+    @Scheduled(fixedDelayString = "${app.guardian.scan-interval-ms:60000}", initialDelay = 30000)
     public void scanClusterHealth() {
         if (!watcherEnabled) {
             return;

@@ -1,26 +1,12 @@
 package com.keepguard.ms_ai_guardian.application.service.agents;
 
-import com.keepguard.ms_ai_guardian.adapters.out.notification.EmailNotificationService;
 import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class BusinessAnalystAgentService {
-
-    private final EmailNotificationService emailNotificationService;
-    private final Optional<ChatClient.Builder> chatClientBuilder;
-    private final Optional<JdbcTemplate> jdbcTemplate;
 
     /**
      * Analisa o contexto do incidente para determinar se é uma falha de REGRA DE NEGÓCIO / BANCO DE DADOS
@@ -156,40 +142,14 @@ public class BusinessAnalystAgentService {
             );
         }
 
-        // 2. Análise com LLM (Se disponível) para casos complexos
-        if (chatClientBuilder.isPresent()) {
-            try {
-                String prompt = String.format("""
-                    Você é um Business Analyst e Product Owner especialista em Microsserviços e Domínios Corporativos.
-                    Analise o erro abaixo:
-                    Serviço: %s
-                    Erro: %s
-                    Logs: %s
-                    
-                    Classifique se é 'DATA_INCONSISTENCY' (dado nulo/inválido no banco) ou 'CODE_DEFECT' (bug no código que requer hotfix).
-                    Responda em no máximo 8 linhas.
-                    """, incident.getServiceName(), incident.getErrorReason(),
-                    com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(recentLogs, 1500));
-
-                String aiResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
-                        () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
-                        15,
-                        null);
-                if (aiResult != null && aiResult.contains("DATA_INCONSISTENCY")) {
-                    return new BusinessVerdict(VerdictType.DATA_INCONSISTENCY, "Inconsistência de Dados de Negócio", aiResult, "-- Inspecionar tabelas relacionais", false);
-                }
-            } catch (Exception e) {
-                log.warn("Falha no LLM do BusinessAnalystAgent: {}", e.getMessage());
-            }
-        }
-
-        // 3. Caso padrão: Trata-se de um defeito real no código-fonte que requer hotfix
+        // LLM NÃO classifica antes do e-mail. Casos não reconhecidos seguem como defeito de código
+        // (squad/PR usa o modelo depois). Se o provedor estiver off, ChatClient.Builder continua Optional.
         return new BusinessVerdict(
                 VerdictType.CODE_DEFECT,
                 "Defeito de implementação de código identificado",
                 "A falha decorre de uma vulnerabilidade ou exceção não tratada na lógica de programação da aplicação.",
                 "",
-                true // DEVE abrir PR de código!
+                true
         );
     }
 

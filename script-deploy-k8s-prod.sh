@@ -56,6 +56,59 @@ echo ""
 echo -e "${CYAN}🚀 Atualizando deployment/${SERVICE_NAME} para ${IMAGE_TAG}...${NC}"
 kubectl set image "deployment/${SERVICE_NAME}" "${SERVICE_NAME}=${IMAGE_TAG}" -n "${NAMESPACE}"
 
+# 2b. Recursos, JVM e probes (boot Java 25 não cabe em 512Mi + Xmx512m; Ollama não pode comer 2 CPUs)
+echo -e "${CYAN}⚙️  Ajustando CPU/memória, JAVA_OPTS, profile prod e probes...${NC}"
+kubectl set resources "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
+  --requests=cpu=250m,memory=512Mi \
+  --limits=cpu=1,memory=1Gi
+
+kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
+  SPRING_PROFILES_ACTIVE=prod \
+  JAVA_OPTS='-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0 -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError' \
+  APP_GUARDIAN_LLM_PROVIDER=ollama \
+  APP_GUARDIAN_OLLAMA_ENABLED=true \
+  APP_GUARDIAN_OPENAI_ENABLED=false \
+  APP_GUARDIAN_ANTHROPIC_ENABLED=false
+
+kubectl patch "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" --type=strategic -p "$(cat <<'EOF'
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: ms-ai-guardian
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8088
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          failureThreshold: 36
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8088
+          periodSeconds: 20
+          failureThreshold: 3
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8088
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 3
+EOF
+)"
+
+if kubectl get deploy ollama -n "${NAMESPACE}" >/dev/null 2>&1; then
+  echo -e "${CYAN}⚙️  Limitando CPU do Ollama para o nó não ficar em 98% e travar o Spring...${NC}"
+  kubectl set resources deployment/ollama -n "${NAMESPACE}" \
+    --requests=cpu=500m,memory=1536Mi \
+    --limits=cpu=1500m,memory=3Gi || true
+fi
+
 # 3. Se for :latest, dispara rollout restart para forçar o download da imagem mais recente
 if [ "$VERSION" = "latest" ]; then
     echo -e "${CYAN}🔄 Disparando rollout restart para baixar a última versão do GitHub...${NC}"
@@ -64,7 +117,7 @@ fi
 
 # 4. Aguardar o término do Rolling Update
 echo -e "${YELLOW}⏳ Aguardando conclusão do rollout em Produção...${NC}"
-kubectl rollout status "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" --timeout=180s
+kubectl rollout status "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" --timeout=420s
 
 echo ""
 echo -e "${GREEN}${BOLD}======================================================================${NC}"

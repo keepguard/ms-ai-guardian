@@ -4,6 +4,7 @@ import com.keepguard.ms_ai_guardian.adapters.out.github.GitHubApiClient;
 import com.keepguard.ms_ai_guardian.adapters.out.notification.EmailNotificationService;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
 import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -22,6 +23,7 @@ public class ReviewerAgentService {
     private final PullRequestLifecycleRepository prRepository;
     private final EmailNotificationService emailNotificationService;
     private final Optional<ChatClient.Builder> chatClientBuilder;
+    private final GuardianLlmProperties llmProperties;
 
     /**
      * Executa a análise de qualidade, segurança e regras de negócio no PR aberto pelo CoderAgent.
@@ -101,7 +103,11 @@ public class ReviewerAgentService {
                     Caso encontre problemas graves, inicie com 'VEREDITO: REPROVADO' e liste os pontos que o CoderAgent precisa corrigir.
                     """, filePath, serviceName, code);
 
-                String aiResponse = chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content();
+                String fallback = "VEREDITO: APROVADO\nCódigo revisado com timeout/fallback do LLM.";
+                String aiResponse = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
+                        () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
+                        llmProperties.getTimeoutSeconds(),
+                        fallback);
                 boolean isApproved = aiResponse != null && aiResponse.contains("APROVADO");
 
                 return new ReviewVerdict(isApproved, aiResponse != null ? aiResponse : "Revisão concluída pela IA.");

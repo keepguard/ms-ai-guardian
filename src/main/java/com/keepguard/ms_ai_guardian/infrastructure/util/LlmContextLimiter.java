@@ -5,8 +5,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * Impede que stack traces gigantes e gerações intermináveis do Ollama
- * bloqueiem o pipeline de alerta.
+ * Impede que stack traces gigantes e gerações intermináveis do LLM
+ * (Ollama ou API paga) bloqueiem o pipeline de alerta.
+ * Timeout vem de app.guardian.llm.timeout-seconds / codegen-timeout-seconds.
  */
 public final class LlmContextLimiter {
 

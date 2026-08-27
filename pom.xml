@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.keepguard</groupId>
 	<artifactId>ms-ai-guardian</artifactId>
-	<version>1.0.22</version>
+	<version>1.0.23</version>
 	<name>ms-ai-guardian</name>
 	<description>KeepGuard AI Guardian - Intelligent Kubernetes Diagnostics and Incident Reasoning Agent</description>
 
@@ -116,7 +116,7 @@
 		</dependencies>
 	</dependencyManagement>
 
-	<build>
+    <build>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
@@ -147,6 +147,38 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<!--
+	  LLM: ollama é o default (starter acima). Para API paga, rebuild com perfil
+	  e desligue o Ollama no cluster:
+	    mvn -Popenaai ...     + APP_GUARDIAN_LLM_PROVIDER=openai
+	                            APP_GUARDIAN_OLLAMA_ENABLED=false
+	                            APP_GUARDIAN_OPENAI_ENABLED=true
+	                            SPRING_AI_OPENAI_API_KEY=...
+	    mvn -Panthropic ...   + APP_GUARDIAN_LLM_PROVIDER=anthropic
+	                            APP_GUARDIAN_ANTHROPIC_ENABLED=true
+	                            SPRING_AI_ANTHROPIC_API_KEY=...
+	-->
+	<profiles>
+		<profile>
+			<id>openai</id>
+			<dependencies>
+				<dependency>
+					<groupId>org.springframework.ai</groupId>
+					<artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+				</dependency>
+			</dependencies>
+		</profile>
+		<profile>
+			<id>anthropic</id>
+			<dependencies>
+				<dependency>
+					<groupId>org.springframework.ai</groupId>
+					<artifactId>spring-ai-anthropic-spring-boot-starter</artifactId>
+				</dependency>
+			</dependencies>
+		</profile>
+	</profiles>
 
 	<repositories>
 		<repository>

@@ -11,8 +11,6 @@ import com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAg
 import com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService.VerdictType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +29,6 @@ public class AiDiagnosticService {
     private final com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService businessAnalystAgentService;
     private final Optional<com.keepguard.ms_ai_guardian.application.service.agents.CoderAgentService> coderAgentService;
     private final Optional<com.keepguard.ms_ai_guardian.application.service.agents.ReviewerAgentService> reviewerAgentService;
-    private final Optional<ChatClient.Builder> chatClientBuilder;
 
     @Value("${app.guardian.anti-flapping-cooldown-minutes:15}")
     private int cooldownMinutes;
@@ -124,14 +121,8 @@ public class AiDiagnosticService {
                     .notificationSent(false)
                     .build();
         } else {
-            // 6. Diagnóstico: panic/CODE_DEFECT não espera o Ollama (alerta não pode travar no LLM)
-            String errorHint = errorReason != null ? errorReason.toLowerCase() : "";
-            boolean knownCodeDefect = errorHint.contains("panic")
-                    || errorHint.contains("code_defect")
-                    || errorHint.contains("nullpointer");
-            String aiResponse = knownCodeDefect
-                    ? generateHeuristicAnalysis(serviceName, errorReason, recentLogs, podHealth)
-                    : executeAiReasoning(serviceName, podName, errorReason, podHealth, recentLogs, warningEvents);
+            // 6. E-mail NUNCA espera o LLM. Heurística imediata; Ollama/API só depois, na squad.
+            String aiResponse = generateHeuristicAnalysis(serviceName, errorReason, recentLogs, podHealth);
             String[] parsedAnalysis = parseAiAnalysis(aiResponse);
             String rootCause = parsedAnalysis[0];
             String recommendedAction = parsedAnalysis[1];
@@ -200,11 +191,11 @@ public class AiDiagnosticService {
             return resultDTO;
         }
 
-        // 10. Envio do E-mail de Diagnóstico Padrão de Engenharia
+        // 10. Envio do E-mail de Diagnóstico Padrão de Engenharia (antes de qualquer LLM)
         boolean emailSent = emailNotificationService.sendIncidentDiagnosticEmail(resultDTO);
         markIncidentNotified(incident, resultDTO, emailSent);
 
-        // 11. 🤖 Acionamento da Squad Autônoma (CoderAgent + ArchitectAgent + QaAgent + ReviewerAgent)
+        // 11. Squad autônoma (PR) — LLM só depois do alerta. Falha/timeout não reabre o e-mail.
         if (coderAgentService.isPresent() && reviewerAgentService.isPresent() && !serviceName.contains("deployment") && !serviceName.contains("busybox")) {
             try {
                 log.info("🛠️ Acionando CoderAgent para criar branch e Pull Request rico de hotfix...");
@@ -238,68 +229,6 @@ public class AiDiagnosticService {
         return org.springframework.util.DigestUtils.md5DigestAsHex(
                 (normalizedService + ":" + normalizedError + ":" + location).getBytes(java.nio.charset.StandardCharsets.UTF_8)
         );
-    }
-
-    private String executeAiReasoning(String serviceName, String podName, String errorReason,
-                                      String podHealth, String recentLogs, List<String> warningEvents) {
-        String systemPrompt = """
-            Você é o KeepGuard AI Guardian, um engenheiro SRE e especialista em arquitetura de microsserviços Java Spring Boot e Kubernetes.
-            Sua missão é analisar falhas, logs e eventos de containers para determinar a causa raiz exata e recomendar ações corretivas objetivas.
-            
-            DIRETRIZES:
-            1. Seja direto, técnico e preciso. Responda SEMPRE em Português do Brasil.
-            2. Estruture sua resposta estritamente nas seguintes seções:
-               [CAUSA_RAIZ]
-               Explicação técnica e detalhada do motivo da falha.
-               [PLANO_DE_ACAO]
-               Passos práticos para mitigar e resolver o problema definitivamente.
-            """;
-
-        String truncatedLogs = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(recentLogs, 2500);
-        String truncatedHealth = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(podHealth, 800);
-        String truncatedEvents = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(String.join("\n", warningEvents), 800);
-        String heuristic = generateHeuristicAnalysis(serviceName, errorReason, truncatedLogs, podHealth);
-
-        String userPrompt = String.format("""
-            Analise o seguinte incidente no cluster Kubernetes KeepGuard.
-            Responda em no máximo 12 linhas, só com as seções [CAUSA_RAIZ] e [PLANO_DE_ACAO].
-            
-            Serviço: %s
-            Pod: %s
-            Motivo Reportado: %s
-            
-            --- STATUS DO POD ---
-            %s
-            
-            --- EVENTOS DE WARNING ---
-            %s
-            
-            --- ÚLTIMAS LINHAS DE LOG ---
-            %s
-            """,
-                serviceName, podName, errorReason,
-                truncatedHealth,
-                truncatedEvents,
-                truncatedLogs
-        );
-
-        try {
-            if (chatClientBuilder.isPresent()) {
-                ChatClient chatClient = chatClientBuilder.get().build();
-                String llmResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
-                        () -> chatClient.prompt(new Prompt(userPrompt)).system(systemPrompt).call().content(),
-                        20,
-                        heuristic);
-                if (llmResult == heuristic) {
-                    log.warn("Ollama excedeu 20s ou falhou. Usando diagnóstico heurístico para não bloquear o e-mail.");
-                }
-                return llmResult;
-            }
-        } catch (Exception e) {
-            log.warn("Falha ao comunicar com Ollama LLM: {}. Aplicando raciocínio heurístico inteligente de fallback.", e.getMessage());
-        }
-
-        return heuristic;
     }
 
     private String generateHeuristicAnalysis(String serviceName, String errorReason, String logs, String podHealth) {

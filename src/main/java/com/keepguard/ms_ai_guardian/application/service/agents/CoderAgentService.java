@@ -4,6 +4,7 @@ import com.keepguard.ms_ai_guardian.adapters.out.github.GitHubApiClient;
 import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
 import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -27,6 +28,7 @@ public class CoderAgentService {
     private final SoftwareArchitectAgentService architectAgentService;
     private final QaAutomationAgentService qaAutomationAgentService;
     private final Optional<ChatClient.Builder> chatClientBuilder;
+    private final GuardianLlmProperties llmProperties;
 
     /**
      * Cria uma branch, aplica a correção gerada pela IA e abre um Pull Request
@@ -271,7 +273,7 @@ public class CoderAgentService {
                 String fallback = currentCode;
                 String aiResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
                         () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
-                        45,
+                        llmProperties.getCodegenTimeoutSeconds(),
                         fallback);
                 if (aiResult != null && !aiResult.isBlank() && !aiResult.equals(fallback)) {
                     // Limpa crases markdown caso o LLM retorne formatação
@@ -304,8 +306,11 @@ public class CoderAgentService {
                                 """,
                         feedback, currentCode);
 
-                String aiResult = chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content();
-                if (aiResult != null && !aiResult.isBlank()) {
+                String aiResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
+                        () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
+                        llmProperties.getCodegenTimeoutSeconds(),
+                        currentCode);
+                if (aiResult != null && !aiResult.isBlank() && !aiResult.equals(currentCode)) {
                     return aiResult.replaceAll("```[a-z]*\n?", "").replaceAll("```", "").trim();
                 }
             } catch (Exception e) {

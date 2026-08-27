@@ -1,24 +1,32 @@
 package com.keepguard.ms_ai_guardian.adapters.out.k8s;
 
 import io.fabric8.kubernetes.api.model.ContainerStatus;
-import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class KubernetesInspectorService {
 
+    private static final Set<String> SKIP_LOG_SCAN_APPS = Set.of(
+            "postgres", "redis", "rabbitmq", "ollama", "prometheus", "grafana",
+            "minio", "ms-ai-guardian"
+    );
+
     private final KubernetesClient k8sClient;
+
+    public KubernetesInspectorService(@Lazy KubernetesClient k8sClient) {
+        this.k8sClient = k8sClient;
+    }
 
     public List<Pod> listUnhealthyPods(String namespace) {
         try {
@@ -84,8 +92,8 @@ public class KubernetesInspectorService {
             }
         }
 
-        // Inspeciona se há logs com PANIC RECOVER, CODE_DEFECT_ ou NullPointerException recentes
-        if ("Running".equalsIgnoreCase(phase) && !pod.getMetadata().getName().startsWith("ms-ai-guardian")) {
+        // Inspeciona logs de apps (não de infra) em busca de PANIC / CODE_DEFECT / NPE
+        if ("Running".equalsIgnoreCase(phase) && shouldScanApplicationLogs(pod)) {
             String logs = getPodLogs(pod.getMetadata().getNamespace(), pod.getMetadata().getName(), 25);
             if (logs.contains("PANIC RECOVER") || logs.contains("NullPointerException") 
                     || logs.contains("BadSqlGrammarException") || logs.contains("CODE_DEFECT_")
@@ -96,6 +104,17 @@ public class KubernetesInspectorService {
         }
 
         return false;
+    }
+
+    private boolean shouldScanApplicationLogs(Pod pod) {
+        String name = pod.getMetadata() != null ? pod.getMetadata().getName() : "";
+        if (name.startsWith("ms-ai-guardian")) {
+            return false;
+        }
+        String app = pod.getMetadata() != null && pod.getMetadata().getLabels() != null
+                ? pod.getMetadata().getLabels().getOrDefault("app", "")
+                : "";
+        return app.isBlank() || !SKIP_LOG_SCAN_APPS.contains(app);
     }
 
     public String getPodLogs(String namespace, String podName, int tailLines) {
