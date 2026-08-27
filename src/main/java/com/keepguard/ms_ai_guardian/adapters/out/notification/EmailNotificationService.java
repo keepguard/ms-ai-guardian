@@ -77,10 +77,17 @@ public class EmailNotificationService {
             log.warn("Falha no envio HTTP ({}), tentando fallback via fila RabbitMQ...", httpEx.getMessage());
         }
 
-        // 2. Fallback via RabbitMQ
+        // 2. Fallback via RabbitMQ (Envia diretamente ao srv-email-google-sender no formato esperado)
         try {
-            log.info("Publicando e-mail de diagnóstico via RabbitMQ para {} | Pod: {}", recipient, result.getPodName());
-            rabbitTemplate.convertAndSend(exchange, routingKey, messagePayload);
+            log.info("Publicando e-mail de diagnóstico diretamente via RabbitMQ para {} | Pod: {}", recipient, result.getPodName());
+            Map<String, Object> directGooglePayload = new HashMap<>();
+            directGooglePayload.put("tenant_id", defaultTenantId);
+            directGooglePayload.put("x_correlation_id", UUID.randomUUID().toString());
+            directGooglePayload.put("to", recipient);
+            directGooglePayload.put("subject", subject);
+            directGooglePayload.put("html", htmlBody);
+
+            rabbitTemplate.convertAndSend("srv-email-google-sender-exchange-dev", "email.google.send", directGooglePayload);
             return true;
         } catch (Exception e) {
             log.error("Falha ao publicar e-mail de incidente no RabbitMQ: {}", e.getMessage(), e);
