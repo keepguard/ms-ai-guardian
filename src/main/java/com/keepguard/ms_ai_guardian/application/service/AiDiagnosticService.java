@@ -67,7 +67,7 @@ public class AiDiagnosticService {
 
         // 2. Coleta de Logs e Eventos do Pod
         String podHealth = k8sInspector.describePodHealth(namespace, podName);
-        String recentLogs = k8sInspector.getPodLogs(namespace, podName, 20);
+        String recentLogs = k8sInspector.getPodLogs(namespace, podName, 80);
         List<String> warningEvents = k8sInspector.getRecentWarningEvents(namespace, podName);
 
         // 3. Avaliação da Severidade

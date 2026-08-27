@@ -94,4 +94,23 @@ class ScopedSourcePatcherTest {
         assertTrue(slice.functionSource().contains("ProcessBatchSMS"));
         assertFalse(slice.functionSource().contains("ExecuteBugScenario"));
     }
+
+    @Test
+    void doesNotPickHealthCheckFromServiceNameInRootCause() {
+        String handler = """
+                package http
+
+                func (h *SMSHandler) SimulateBug(c echo.Context) error {
+                	return fmt.Errorf("CODE_DEFECT_01: Divisao por zero")
+                }
+
+                func (h *SMSHandler) HealthCheck(c echo.Context) error {
+                	return c.JSON(200, map[string]string{"service": "mock-sms-gateway"})
+                }
+                """;
+        var slice = ScopedSourcePatcher.extract(handler, "internal/adapters/in/http/handler.go",
+                "CODE_DEFECT_01", "CODE_DEFECT_01 no microsserviço mock-sms-gateway.");
+        assertTrue(slice.functionSource().contains("SimulateBug"));
+        assertFalse(slice.functionSource().contains("HealthCheck"));
+    }
 }

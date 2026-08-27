@@ -35,13 +35,34 @@ public class SourceFileResolver {
 
         for (String path : ranked) {
             Map<String, String> file = gitHubClient.getFileContent(repoName, path, branch);
-            if (file.containsKey("content") && !file.get("content").isBlank()) {
-                log.info("📂 [SourceFileResolver] Arquivo do incidente: {} (linha {})", path, hint.lineNumber());
-                return Optional.of(new ResolvedFile(path, file.get("content"), file.get("sha"), hint.lineNumber()));
+            if (!file.containsKey("content") || file.get("content").isBlank()) {
+                continue;
             }
+            String content = file.get("content");
+            Integer line = lineBoundToThisFile(path, hint, content);
+            if (hint.lineNumber() != null && line == null) {
+                log.warn("📂 [SourceFileResolver] Linha {} não pertence a {}; ignorando número de linha.",
+                        hint.lineNumber(), path);
+            }
+            log.info("📂 [SourceFileResolver] Arquivo do incidente: {} (linha {})", path, line);
+            return Optional.of(new ResolvedFile(path, content, file.get("sha"), line));
         }
 
         log.warn("📂 [SourceFileResolver] Nenhum arquivo de código encontrado para {} a partir dos logs.", repoName);
         return Optional.empty();
+    }
+
+    static Integer lineBoundToThisFile(String path, IncidentSourceLocator.Hint hint, String content) {
+        if (hint == null || hint.lineNumber() == null || hint.primaryBasename().isBlank()) {
+            return null;
+        }
+        String base = path.substring(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+        if (!base.equalsIgnoreCase(hint.primaryBasename())) {
+            return null;
+        }
+        if (!IncidentSourceLocator.lineExistsIn(content, hint.lineNumber())) {
+            return null;
+        }
+        return hint.lineNumber();
     }
 }

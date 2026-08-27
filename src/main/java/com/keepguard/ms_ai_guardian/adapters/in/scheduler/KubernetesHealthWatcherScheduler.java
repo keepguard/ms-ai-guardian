@@ -113,7 +113,7 @@ public class KubernetesHealthWatcherScheduler {
                 }
 
                 // Se o pod estiver Running com anomalia de log, extrai o erro específico
-                String logs = k8sInspector.getPodLogs(targetNamespace, podName, 20);
+                String logs = k8sInspector.getPodLogs(targetNamespace, podName, 80);
                 if (logs.contains("CODE_DEFECT_")) {
                     int idx = logs.indexOf("CODE_DEFECT_");
                     int end = logs.indexOf("\n", idx);

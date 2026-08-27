@@ -94,7 +94,7 @@ public class KubernetesInspectorService {
 
         // Inspeciona logs de apps (não de infra) em busca de PANIC / CODE_DEFECT / NPE
         if ("Running".equalsIgnoreCase(phase) && shouldScanApplicationLogs(pod)) {
-            String logs = getPodLogs(pod.getMetadata().getNamespace(), pod.getMetadata().getName(), 25);
+            String logs = getPodLogs(pod.getMetadata().getNamespace(), pod.getMetadata().getName(), 80);
             if (logs.contains("PANIC RECOVER") || logs.contains("NullPointerException") 
                     || logs.contains("BadSqlGrammarException") || logs.contains("CODE_DEFECT_")
                     || logs.contains("PANIC_RUNTIME")) {

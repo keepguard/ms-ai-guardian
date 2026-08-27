@@ -47,7 +47,7 @@ public final class ScopedSourcePatcher {
         }
         String haystack = ((errorReason == null ? "" : errorReason) + " "
                 + (rootCause == null ? "" : rootCause)).toLowerCase(Locale.ROOT);
-        String best = pickFunction(functions, haystack);
+        String best = pickFunction(functions, haystack, errorReason);
         return new Slice(source, best, lang);
     }
 
@@ -126,11 +126,11 @@ public final class ScopedSourcePatcher {
         return parts;
     }
 
-    static String pickFunction(List<String> functions, String haystack) {
+    static String pickFunction(List<String> functions, String haystack, String errorReason) {
         String best = functions.get(0);
         int bestScore = -1;
         for (String fn : functions) {
-            int score = score(fn, haystack);
+            int score = score(fn, haystack, errorReason);
             if (score > bestScore) {
                 bestScore = score;
                 best = fn;
@@ -139,11 +139,15 @@ public final class ScopedSourcePatcher {
         return best;
     }
 
-    static int score(String function, String haystack) {
+    static int score(String function, String haystack, String errorReason) {
         String fn = function.toLowerCase(Locale.ROOT);
         int score = 0;
+        if (errorReason != null && errorReason.length() >= 4
+                && fn.contains(errorReason.toLowerCase(Locale.ROOT))) {
+            score += 50;
+        }
         for (String token : haystack.split("[^a-z0-9_]+")) {
-            if (token.length() < 4) {
+            if (token.length() < 4 || IncidentSourceLocator.isWeakErrorToken(token)) {
                 continue;
             }
             if (fn.contains(token)) {
