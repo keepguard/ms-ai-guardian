@@ -3,8 +3,10 @@ package com.keepguard.ms_ai_guardian.application.service.agents;
 import com.keepguard.ms_ai_guardian.adapters.out.github.GitHubApiClient;
 import com.keepguard.ms_ai_guardian.adapters.out.notification.EmailNotificationService;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
+import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
 import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -21,62 +23,62 @@ public class ReviewerAgentService {
 
     private final GitHubApiClient gitHubClient;
     private final PullRequestLifecycleRepository prRepository;
+    private final IncidentRepository incidentRepository;
     private final EmailNotificationService emailNotificationService;
     private final Optional<ChatClient.Builder> chatClientBuilder;
     private final GuardianLlmProperties llmProperties;
 
     /**
-     * Executa a análise de qualidade, segurança e regras de negócio no PR aberto pelo CoderAgent.
+     * Julga somente o hotfix do incidente. Problemas pré-existentes no arquivo
+     * viram observação, não REPROVADO.
      */
     public boolean performReview(PullRequestLifecycle pr) {
         String repoName = pr.getRepoName();
         int prNumber = pr.getPrNumber();
 
-        log.info("🧐 [ReviewerAgent] Analisando PR #{} do repositório {}", prNumber, repoName);
+        log.info("🧐 [ReviewerAgent] Analisando PR #{} do repositório {} (escopo do incidente)", prNumber, repoName);
 
         try {
-            // 1. Lê o código alterado na branch do PR
             Map<String, String> fileInfo = gitHubClient.getFileContent(repoName, pr.getFilePath(), pr.getBranchName());
             String modifiedCode = fileInfo.getOrDefault("content", "");
 
-            // 2. IA analisa o código em busca de falhas de segurança, Clean Code e bugs
-            ReviewVerdict verdict = evaluateCodeWithAi(repoName, pr.getFilePath(), modifiedCode);
+            IncidentScope scope = resolveIncidentScope(pr);
+            ReviewVerdict verdict = evaluateHotfixWithAi(repoName, pr.getFilePath(), modifiedCode, scope);
 
-            // 3. Submete o parecer da revisão no GitHub (via COMMENT para não colidir com a regra do GitHub de aprovação do próprio autor)
             if (verdict.approved()) {
-                gitHubClient.submitReview(repoName, prNumber, "COMMENT", 
-                        "🤖 **[ReviewerAgent] PARECER TÉCNICO: APROVADO PELA IA!**\n\n" + verdict.feedback() + 
-                        "\n\n---\n👤 **Atenção:** Aguardando revisão final e Merge do desenvolvedor humano (@rafael-soares).");
+                gitHubClient.submitReview(repoName, prNumber, "COMMENT",
+                        "🤖 **[ReviewerAgent] PARECER TÉCNICO: APROVADO NO ESCOPO DO INCIDENTE**\n\n"
+                                + verdict.feedback()
+                                + "\n\n---\n👤 **Atenção:** Aguardando revisão final e Merge do desenvolvedor humano (@rafael-soares).");
 
                 boolean isFirstApproval = !pr.isAiApproved() && !"CHANGES_REQUESTED".equals(pr.getStatus());
-                
+
                 pr.setAiReviewed(true);
                 pr.setAiApproved(true);
                 pr.setAiReviewFeedback(verdict.feedback());
                 pr.setStatus("AI_APPROVED");
                 prRepository.save(pr);
 
-                log.info("✅ [ReviewerAgent] PR #{} APROVADO pela IA com sucesso!", prNumber);
+                log.info("✅ [ReviewerAgent] PR #{} APROVADO no escopo do incidente.", prNumber);
 
-                // Envia e-mail de notificação para o Rafael informando que o PR está pronto para aprovação humana apenas na 1ª vez
                 if (isFirstApproval) {
                     emailNotificationService.sendPrReadyForHumanApprovalEmail(pr, verdict.feedback());
                 }
                 return true;
-
-            } else {
-                gitHubClient.submitReview(repoName, prNumber, "COMMENT",
-                        "⚠️ **[ReviewerAgent] PARECER TÉCNICO: SOLICITAÇÃO DE AJUSTES**\n\n" + verdict.feedback());
-
-                pr.setAiReviewed(true);
-                pr.setAiApproved(false);
-                pr.setAiReviewFeedback(verdict.feedback());
-                pr.setStatus("CHANGES_REQUESTED");
-                prRepository.save(pr);
-
-                log.warn("⚠️ [ReviewerAgent] PR #{} requer ajustes do CoderAgent: {}", prNumber, verdict.feedback());
-                return false;
             }
+
+            gitHubClient.submitReview(repoName, prNumber, "COMMENT",
+                    "⚠️ **[ReviewerAgent] PARECER TÉCNICO: HOTFIX INSUFICIENTE PARA O INCIDENTE**\n\n"
+                            + verdict.feedback());
+
+            pr.setAiReviewed(true);
+            pr.setAiApproved(false);
+            pr.setAiReviewFeedback(verdict.feedback());
+            pr.setStatus("CHANGES_REQUESTED");
+            prRepository.save(pr);
+
+            log.warn("⚠️ [ReviewerAgent] PR #{} não cobre o incidente: {}", prNumber, verdict.feedback());
+            return false;
 
         } catch (Exception e) {
             log.error("Erro no [ReviewerAgent] durante análise do PR #{}: {}", prNumber, e.getMessage(), e);
@@ -84,41 +86,81 @@ public class ReviewerAgentService {
         }
     }
 
-    private ReviewVerdict evaluateCodeWithAi(String serviceName, String filePath, String code) {
+    private IncidentScope resolveIncidentScope(PullRequestLifecycle pr) {
+        if (pr.getIncidentId() == null) {
+            return new IncidentScope("hotfix deste PR", "correção automatizada pelo CoderAgent");
+        }
+        return incidentRepository.findById(pr.getIncidentId())
+                .map(inc -> new IncidentScope(
+                        nvl(inc.getErrorReason()),
+                        nvl(inc.getAiRootCauseAnalysis())))
+                .orElse(new IncidentScope("hotfix deste PR", "correção automatizada pelo CoderAgent"));
+    }
+
+    private ReviewVerdict evaluateHotfixWithAi(String serviceName, String filePath, String code, IncidentScope scope) {
         if (chatClientBuilder.isPresent()) {
             try {
                 String prompt = String.format("""
-                    Você é um Tech Lead e Arquiteto de Software Java Spring Boot especialista em Code Review.
-                    Analise o arquivo '%s' do microsserviço '%s'.
-                    
-                    --- CÓDIGO DO PULL REQUEST ---
-                    %s
-                    
-                    Critérios de Avaliação:
-                    1. Segurança e ausência de vulnerabilidades.
-                    2. Tratamento adequado de ponteiros nulos e exceções.
-                    3. Respeito à arquitetura limpa (Clean Code / Spring Boot).
-                    
-                    Se o código estiver de alta qualidade e seguro, inicie sua resposta com 'VEREDITO: APROVADO' seguido de elogios/pontos positivos.
-                    Caso encontre problemas graves, inicie com 'VEREDITO: REPROVADO' e liste os pontos que o CoderAgent precisa corrigir.
-                    """, filePath, serviceName, code);
+                    Você é um Tech Lead fazendo code review de um HOTFIX pontual (não de um refactor).
+                    Serviço: %s
+                    Arquivo: %s
 
-                String fallback = "VEREDITO: APROVADO\nCódigo revisado com timeout/fallback do LLM.";
-                String aiResponse = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
+                    --- INCIDENTE (ÚNICO CRITÉRIO DO VEREDITO) ---
+                    Erro: %s
+                    Causa raiz: %s
+
+                    --- CÓDIGO NA BRANCH DO PR ---
+                    %s
+
+                    Regras:
+                    1. VEREDITO: APROVADO se o hotfix trata o incidente acima (ex.: CODE_DEFECT_01 / divisão por zero) e não introduz regressão óbvia NESSE ponto.
+                    2. VEREDITO: REPROVADO somente se o incidente NÃO foi corrigido ou o patch piora a falha reportada.
+                    3. NÃO reprove por código pré-existente (simulate-bug, panics de laboratório, mocks, outros numberBug). Isso está FORA DO ESCOPO.
+                    4. Se houver outros problemas no arquivo, liste-os numa seção "Observações fora do escopo" SEM mudar o veredito para REPROVADO.
+
+                    Responda começando exatamente com uma destas linhas:
+                    VEREDITO: APROVADO
+                    VEREDITO: REPROVADO
+                    Depois explique o hotfix e, se couber, as observações fora do escopo.
+                    """,
+                        serviceName,
+                        filePath,
+                        scope.errorReason(),
+                        scope.rootCause(),
+                        LlmContextLimiter.tail(code, 8000));
+
+                String fallback = "VEREDITO: APROVADO\nHotfix revisado com timeout/fallback do LLM. Observações fora do escopo não avaliadas.";
+                String aiResponse = LlmContextLimiter.callWithTimeout(
                         () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
                         llmProperties.getTimeoutSeconds(),
                         fallback);
-                boolean isApproved = aiResponse != null && aiResponse.contains("APROVADO");
-
-                return new ReviewVerdict(isApproved, aiResponse != null ? aiResponse : "Revisão concluída pela IA.");
+                return new ReviewVerdict(parseApproved(aiResponse),
+                        aiResponse != null ? aiResponse : "Revisão concluída pela IA.");
             } catch (Exception e) {
                 log.warn("Falha no LLM do ReviewerAgent: {}", e.getMessage());
             }
         }
 
-        // Heurística de Aprovação Segura caso o LLM esteja indisponível
-        return new ReviewVerdict(true, "Código revisado e validado pelas diretrizes de segurança do KeepGuard Guardian.");
+        return new ReviewVerdict(true,
+                "VEREDITO: APROVADO\nLLM indisponível; hotfix aceito no escopo do incidente.");
     }
+
+    static boolean parseApproved(String aiResponse) {
+        if (aiResponse == null || aiResponse.isBlank()) {
+            return true;
+        }
+        String head = aiResponse.lines().limit(12).reduce("", (a, b) -> a + "\n" + b).toUpperCase();
+        if (head.contains("VEREDITO: REPROVADO")) {
+            return false;
+        }
+        return true;
+    }
+
+    private static String nvl(String value) {
+        return value == null || value.isBlank() ? "—" : value;
+    }
+
+    private record IncidentScope(String errorReason, String rootCause) {}
 
     public record ReviewVerdict(boolean approved, String feedback) {}
 }

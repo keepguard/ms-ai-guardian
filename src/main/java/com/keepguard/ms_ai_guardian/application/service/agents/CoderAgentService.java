@@ -99,7 +99,8 @@ public class CoderAgentService {
             }
 
             // 5. 🧪 QA AUTOMATION AGENT: Certifica e testa o hotfix antes de commitar
-            var qaReport = qaAutomationAgentService.certifyQuality(repoName, targetPath, fixedCode);
+            var qaReport = qaAutomationAgentService.certifyQuality(repoName, targetPath, fixedCode,
+                    incident.getErrorReason());
 
             // 6. 📐 SOFTWARE ARCHITECT AGENT: Analisa arquitetura e gera diagramas Mermaid
             // Antes vs Depois
