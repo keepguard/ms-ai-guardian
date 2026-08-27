@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 import java.util.Optional;
@@ -27,7 +26,6 @@ public class ReviewerAgentService {
     /**
      * Executa a análise de qualidade, segurança e regras de negócio no PR aberto pelo CoderAgent.
      */
-    @Transactional
     public boolean performReview(PullRequestLifecycle pr) {
         String repoName = pr.getRepoName();
         int prNumber = pr.getPrNumber();

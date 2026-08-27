@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -26,7 +25,6 @@ public class DeployerAgentService {
     /**
      * Executado quando o Humano (Rafael) realiza o Merge no GitHub.
      */
-    @Transactional
     public boolean handleMergedPullRequest(String repoName, int prNumber, String mergedBy) {
         log.info("🚀 [DeployerAgent] Merge detectado no PR #{} do repositório {} efetuado por @{}. Iniciando esteira de deploy...",
                 prNumber, repoName, mergedBy);

@@ -37,7 +37,7 @@ public class BusinessAnalystAgentService {
         if (errorLower.contains("pending") || errorLower.contains("imagepullbackoff") 
                 || errorLower.contains("errimagepull") || errorLower.contains("containercreating")
                 || errorLower.contains("createcontainerconfigerror") || errorLower.contains("oomkilled")
-                || errorLower.contains("service_outage_zero_replicas") || errorLower.contains("restart_or_failure_detected")
+                || errorLower.contains("service_outage_zero_replicas")
                 || logsLower.contains("failed to pull and unpack image") || logsLower.contains("no match for platform in manifest")
                 || logsLower.contains("connection refused") || logsLower.contains("dial tcp")) {
 

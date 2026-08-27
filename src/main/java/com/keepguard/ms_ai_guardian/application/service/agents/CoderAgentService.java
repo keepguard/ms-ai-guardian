@@ -11,7 +11,6 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,7 +32,6 @@ public class CoderAgentService {
      * Cria uma branch, aplica a correção gerada pela IA e abre um Pull Request
      * enriquecido com Arquitetura e QA.
      */
-    @Transactional
     public Optional<PullRequestLifecycle> createHotfixPullRequest(
             DiagnosticResultDTO incident,
             String filePath,
@@ -59,7 +57,7 @@ public class CoderAgentService {
                 return Optional.of(pr);
             } else {
                 pr.setStatus("CLOSED");
-                prRepository.save(pr);
+                savePrState(pr);
             }
         }
 
@@ -142,7 +140,7 @@ public class CoderAgentService {
                     .deployedToK8s(false)
                     .build();
 
-            prRepository.save(lifecycle);
+            savePrState(lifecycle);
             log.info("✅ [CoderAgent] Pull Request #{} aberto com sucesso: {}", prNumber, prUrl);
             return Optional.of(lifecycle);
 
@@ -155,7 +153,6 @@ public class CoderAgentService {
     /**
      * Ajusta o código do PR com base no comentário/feedback recebido da revisão.
      */
-    @Transactional
     public boolean applyReviewFeedbackAndNotify(String repoName, int prNumber, String commentId, String commentFeedback,
             String author) {
         log.info("🛠️ [CoderAgent] Ajustando código do PR #{} com base no feedback de {}: {}", prNumber, author,
@@ -213,7 +210,7 @@ public class CoderAgentService {
             lifecycle.setStatus("CHANGES_REQUESTED");
             lifecycle.setAiReviewed(false); // Exige nova revisão do ReviewerAgent
             lifecycle.setAiApproved(false);
-            prRepository.save(lifecycle);
+            savePrState(lifecycle);
 
             String reply = String.format(
                     """
@@ -236,6 +233,15 @@ public class CoderAgentService {
         }
 
         return false;
+    }
+
+    /**
+     * Persistência curta do ciclo de vida do PR. Isolada para não prender conexão
+     * de banco durante I/O do GitHub e do LLM.
+     */
+    @Transactional
+    public PullRequestLifecycle savePrState(PullRequestLifecycle pr) {
+        return prRepository.save(pr);
     }
 
     private String generateCodeFixWithAi(String serviceName, DiagnosticResultDTO incident, String currentCode,

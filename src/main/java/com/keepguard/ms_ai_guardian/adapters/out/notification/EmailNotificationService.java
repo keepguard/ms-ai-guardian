@@ -24,11 +24,11 @@ public class EmailNotificationService {
     @Value("${app.communication.url:http://ms-communication:8082}")
     private String communicationUrl;
 
-    @Value("${app.rabbitmq.exchange:ms-communication-exchange-dev}")
-    private String exchange;
+    @Value("${app.rabbitmq.email-exchange:srv-email-google-sender-exchange-dev}")
+    private String emailExchange;
 
-    @Value("${app.rabbitmq.routing-key:communication.message.send}")
-    private String routingKey;
+    @Value("${app.rabbitmq.email-routing-key:email.google.send}")
+    private String emailRoutingKey;
 
     @Value("${app.guardian.default-recipient:rafael.nogueira2009@gmail.com}")
     private String defaultRecipient;
@@ -37,62 +37,10 @@ public class EmailNotificationService {
     private String defaultTenantId;
 
     public boolean sendIncidentDiagnosticEmail(DiagnosticResultDTO result) {
-        String recipient = defaultRecipient;
         String subject = String.format("🚨 [KeepGuard AI Guardian] Incidente: %s (%s)",
                 result.getServiceName(), result.getSeverity());
-
-        String htmlBody = buildHtmlReport(result);
-
-        Map<String, Object> messagePayload = new HashMap<>();
-        messagePayload.put("tenantId", defaultTenantId);
-        messagePayload.put("xCorrelationId", UUID.randomUUID().toString());
-        messagePayload.put("messageType", "EMAIL");
-        messagePayload.put("recipient", recipient);
-        messagePayload.put("templateType", "ALERTA_SEGURANCA");
-        messagePayload.put("subject", subject);
-        messagePayload.put("communicationType", "EMAIL");
-        messagePayload.put("codeUser", "ADMIN_GUARDIAN");
-
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("serviceName", result.getServiceName());
-        variables.put("severity", result.getSeverity().name());
-        variables.put("diagnosticReportHtml", htmlBody);
-        messagePayload.put("variables", variables);
-
-        // 1. Tenta envio direto via API REST do ms-communication (HTTP)
-        try {
-            log.info("Tentando envio direto via HTTP ms-communication para {} | Pod: {}", recipient, result.getPodName());
-            restClient.post()
-                    .uri(communicationUrl + "/api/v1/messages/send")
-                    .header("X-Tenant-Id", defaultTenantId)
-                    .header("Content-Type", "application/json")
-                    .body(messagePayload)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            log.info("✅ E-mail de incidente enviado com sucesso via ms-communication HTTP para {}", recipient);
-            return true;
-
-        } catch (Exception httpEx) {
-            log.warn("Falha no envio HTTP ({}), tentando fallback via fila RabbitMQ...", httpEx.getMessage());
-        }
-
-        // 2. Fallback via RabbitMQ (Envia diretamente ao srv-email-google-sender no formato esperado)
-        try {
-            log.info("Publicando e-mail de diagnóstico diretamente via RabbitMQ para {} | Pod: {}", recipient, result.getPodName());
-            Map<String, Object> directGooglePayload = new HashMap<>();
-            directGooglePayload.put("tenant_id", defaultTenantId);
-            directGooglePayload.put("x_correlation_id", UUID.randomUUID().toString());
-            directGooglePayload.put("to", recipient);
-            directGooglePayload.put("subject", subject);
-            directGooglePayload.put("html", htmlBody);
-
-            rabbitTemplate.convertAndSend("srv-email-google-sender-exchange-dev", "email.google.send", directGooglePayload);
-            return true;
-        } catch (Exception e) {
-            log.error("Falha ao publicar e-mail de incidente no RabbitMQ: {}", e.getMessage(), e);
-            return false;
-        }
+        return dispatchEmail(subject, buildHtmlReport(result), result.getServiceName(),
+                result.getSeverity().name(), result.getPodName());
     }
 
     private String buildHtmlReport(DiagnosticResultDTO result) {
@@ -498,39 +446,64 @@ public class EmailNotificationService {
     }
 
     private boolean sendGenericEmail(String subject, String htmlBody, String serviceName) {
-        Map<String, Object> messagePayload = new HashMap<>();
-        messagePayload.put("tenantId", defaultTenantId);
-        messagePayload.put("xCorrelationId", UUID.randomUUID().toString());
-        messagePayload.put("messageType", "EMAIL");
-        messagePayload.put("recipient", defaultRecipient);
-        messagePayload.put("templateType", "ALERTA_SEGURANCA");
-        messagePayload.put("subject", subject);
-        messagePayload.put("communicationType", "EMAIL");
-        messagePayload.put("codeUser", "ADMIN_GUARDIAN");
+        return dispatchEmail(subject, htmlBody, serviceName, "INFO", serviceName);
+    }
+
+    /**
+     * HTTP no ms-communication (camelCase, contrato REST) e, se falhar, fallback
+     * direto no srv-email-google-sender com payload snake_case (tenant_id, to, html).
+     */
+    private boolean dispatchEmail(String subject, String htmlBody, String serviceName, String severity, String logContext) {
+        Map<String, Object> communicationPayload = new HashMap<>();
+        communicationPayload.put("tenantId", defaultTenantId);
+        communicationPayload.put("xCorrelationId", UUID.randomUUID().toString());
+        communicationPayload.put("messageType", "EMAIL");
+        communicationPayload.put("recipient", defaultRecipient);
+        communicationPayload.put("templateType", "ALERTA_SEGURANCA");
+        communicationPayload.put("subject", subject);
+        communicationPayload.put("communicationType", "EMAIL");
+        communicationPayload.put("codeUser", "ADMIN_GUARDIAN");
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("serviceName", serviceName);
-        variables.put("severity", "INFO");
+        variables.put("severity", severity);
         variables.put("diagnosticReportHtml", htmlBody);
-        messagePayload.put("variables", variables);
+        communicationPayload.put("variables", variables);
 
         try {
+            log.info("Tentando envio HTTP via ms-communication para {} | contexto: {}", defaultRecipient, logContext);
             restClient.post()
                     .uri(communicationUrl + "/api/v1/messages/send")
                     .header("X-Tenant-Id", defaultTenantId)
                     .header("Content-Type", "application/json")
-                    .body(messagePayload)
+                    .body(communicationPayload)
                     .retrieve()
                     .toBodilessEntity();
+            log.info("✅ E-mail enviado via HTTP ms-communication para {} | contexto: {}", defaultRecipient, logContext);
+            return true;
+        } catch (Exception httpEx) {
+            log.warn("Falha no envio HTTP ({}), publicando fallback snake_case no srv-email-google-sender...", httpEx.getMessage());
+        }
+
+        return publishToGoogleSender(subject, htmlBody, logContext);
+    }
+
+    private boolean publishToGoogleSender(String subject, String htmlBody, String logContext) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("tenant_id", defaultTenantId);
+            payload.put("x_correlation_id", UUID.randomUUID().toString());
+            payload.put("to", defaultRecipient);
+            payload.put("subject", subject);
+            payload.put("html", htmlBody);
+
+            log.info("Publicando e-mail via RabbitMQ ({}/{}) | contexto: {}", emailExchange, emailRoutingKey, logContext);
+            rabbitTemplate.convertAndSend(emailExchange, emailRoutingKey, payload);
+            log.info("✅ E-mail publicado na fila do srv-email-google-sender para {}", defaultRecipient);
             return true;
         } catch (Exception e) {
-            try {
-                rabbitTemplate.convertAndSend(exchange, routingKey, messagePayload);
-                return true;
-            } catch (Exception ex) {
-                log.error("Erro ao enviar e-mail genérico: {}", ex.getMessage());
-                return false;
-            }
+            log.error("Falha ao publicar e-mail no RabbitMQ: {}", e.getMessage(), e);
+            return false;
         }
     }
 }

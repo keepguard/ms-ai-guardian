@@ -126,16 +126,6 @@ public class KubernetesHealthWatcherScheduler {
 
                 log.info("🔍 [AI Guardian Watcher] Causa identificada para {}: {}", podName, errorReason);
 
-                // Se já existir um PR aberto/pendente para este microsserviço, não dispara novo diagnóstico nem e-mails
-                boolean hasActivePr = prRepository.findAll().stream()
-                        .anyMatch(pr -> serviceName.equalsIgnoreCase(pr.getRepoName()) && 
-                                ("OPEN".equals(pr.getStatus()) || "AI_APPROVED".equals(pr.getStatus()) || "CHANGES_REQUESTED".equals(pr.getStatus())));
-
-                if (hasActivePr) {
-                    log.info("⏳ [AI Guardian] Microsserviço {} já possui um PR de hotfix ativo em andamento. Notificação suprimida.", serviceName);
-                    continue;
-                }
-
                 aiDiagnosticService.diagnosePod(targetNamespace, podName, serviceName, errorReason, false);
             }
 

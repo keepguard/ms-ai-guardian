@@ -15,7 +15,6 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,7 +39,6 @@ public class AiDiagnosticService {
     @Value("${app.guardian.default-recipient:rafael.nogueira2009@gmail.com}")
     private String defaultRecipient;
 
-    @Transactional
     public DiagnosticResultDTO diagnosePod(String namespace, String podName, String serviceName, String errorReason, boolean forceSendEmail) {
         log.info("🤖 Iniciando diagnóstico inteligente para pod: {}/{} | Serviço: {}", namespace, podName, serviceName);
 
@@ -50,7 +48,7 @@ public class AiDiagnosticService {
             Optional<Incident> recentIncident = incidentRepository
                     .findTopByPodNameAndCreatedAtAfterOrderByCreatedAtDesc(podName, cooldownLimit);
 
-            if (recentIncident.isPresent()) {
+            if (recentIncident.isPresent() && recentIncident.get().isNotificationSent()) {
                 log.info("⏳ Incidente ignorado por cooldown anti-flapping para pod: {} (Já notificado recentemente)", podName);
                 Incident inc = recentIncident.get();
                 return DiagnosticResultDTO.builder()
@@ -64,6 +62,9 @@ public class AiDiagnosticService {
                         .recommendedAction(inc.getAiRecommendedAction())
                         .notificationSent(false)
                         .build();
+            }
+            if (recentIncident.isPresent()) {
+                log.info("🔁 Cooldown ignorado para pod {}: incidente recente ainda sem notificação enviada.", podName);
             }
         }
 
@@ -80,16 +81,37 @@ public class AiDiagnosticService {
 
         // 5. Deduplicação e Agrupamento por Fingerprint
         Optional<Incident> existingIncidentOpt = incidentRepository.findFirstByFingerprintOrderByCreatedAtDesc(fingerprint);
+        Incident incident;
+        DiagnosticResultDTO resultDTO;
+
         if (existingIncidentOpt.isPresent()) {
             Incident existingIncident = existingIncidentOpt.get();
             existingIncident.setOccurrencesCount(existingIncident.getOccurrencesCount() + 1);
             existingIncident.setLastSeenAt(LocalDateTime.now());
             incidentRepository.save(existingIncident);
 
-            log.info("🛡️ [Incident Deduplication] Incidente já rastreado para o fingerprint '{}' (ID: {}). Ocorrência #{} incrementada sem criar novo PR ou spam de e-mails.",
-                    fingerprint, existingIncident.getId(), existingIncident.getOccurrencesCount());
+            if (!forceSendEmail && existingIncident.isNotificationSent()) {
+                log.info("🛡️ [Incident Deduplication] Incidente já rastreado para o fingerprint '{}' (ID: {}). Ocorrência #{} incrementada sem criar novo PR ou spam de e-mails.",
+                        fingerprint, existingIncident.getId(), existingIncident.getOccurrencesCount());
 
-            return DiagnosticResultDTO.builder()
+                return DiagnosticResultDTO.builder()
+                        .incidentId(existingIncident.getId())
+                        .podName(existingIncident.getPodName())
+                        .namespace(existingIncident.getNamespace())
+                        .serviceName(existingIncident.getServiceName())
+                        .severity(existingIncident.getSeverity())
+                        .errorReason(existingIncident.getErrorReason())
+                        .rootCause(existingIncident.getAiRootCauseAnalysis())
+                        .recommendedAction(existingIncident.getAiRecommendedAction())
+                        .technicalDetails(warningEvents)
+                        .notificationSent(false)
+                        .build();
+            }
+
+            log.info("🔁 Reprocessando incidente {} (fingerprint {}, forceSendEmail={}, notificationSent={}) para reenvio de notificação.",
+                    existingIncident.getId(), fingerprint, forceSendEmail, existingIncident.isNotificationSent());
+            incident = existingIncident;
+            resultDTO = DiagnosticResultDTO.builder()
                     .incidentId(existingIncident.getId())
                     .podName(existingIncident.getPodName())
                     .namespace(existingIncident.getNamespace())
@@ -101,47 +123,47 @@ public class AiDiagnosticService {
                     .technicalDetails(warningEvents)
                     .notificationSent(false)
                     .build();
+        } else {
+            // 6. Diagnóstico com IA para novo incidente
+            String aiResponse = executeAiReasoning(serviceName, podName, errorReason, podHealth, recentLogs, warningEvents);
+            String[] parsedAnalysis = parseAiAnalysis(aiResponse);
+            String rootCause = parsedAnalysis[0];
+            String recommendedAction = parsedAnalysis[1];
+
+            // 7. Persistência do Novo Incidente
+            incident = Incident.builder()
+                    .podName(podName)
+                    .namespace(namespace)
+                    .serviceName(serviceName)
+                    .severity(severity)
+                    .errorReason(errorReason)
+                    .fingerprint(fingerprint)
+                    .occurrencesCount(1)
+                    .lastSeenAt(LocalDateTime.now())
+                    .capturedLogsSnippet(recentLogs.length() > 3000 ? recentLogs.substring(recentLogs.length() - 3000) : recentLogs)
+                    .aiRootCauseAnalysis(rootCause)
+                    .aiRecommendedAction(recommendedAction)
+                    .status(IncidentStatus.DETECTED)
+                    .targetRecipientEmail(defaultRecipient)
+                    .notificationSent(false)
+                    .build();
+
+            incident = incidentRepository.save(incident);
+
+            // 8. Monta DTO de Resposta
+            resultDTO = DiagnosticResultDTO.builder()
+                    .incidentId(incident.getId())
+                    .podName(podName)
+                    .namespace(namespace)
+                    .serviceName(serviceName)
+                    .severity(severity)
+                    .errorReason(errorReason)
+                    .rootCause(rootCause)
+                    .recommendedAction(recommendedAction)
+                    .technicalDetails(warningEvents)
+                    .notificationSent(false)
+                    .build();
         }
-
-        // 6. Diagnóstico com IA para novo incidente
-        String aiResponse = executeAiReasoning(serviceName, podName, errorReason, podHealth, recentLogs, warningEvents);
-        String[] parsedAnalysis = parseAiAnalysis(aiResponse);
-        String rootCause = parsedAnalysis[0];
-        String recommendedAction = parsedAnalysis[1];
-
-        // 7. Persistência do Novo Incidente
-        Incident incident = Incident.builder()
-                .podName(podName)
-                .namespace(namespace)
-                .serviceName(serviceName)
-                .severity(severity)
-                .errorReason(errorReason)
-                .fingerprint(fingerprint)
-                .occurrencesCount(1)
-                .lastSeenAt(LocalDateTime.now())
-                .capturedLogsSnippet(recentLogs.length() > 3000 ? recentLogs.substring(recentLogs.length() - 3000) : recentLogs)
-                .aiRootCauseAnalysis(rootCause)
-                .aiRecommendedAction(recommendedAction)
-                .status(IncidentStatus.DETECTED)
-                .targetRecipientEmail(defaultRecipient)
-                .notificationSent(false)
-                .build();
-
-        incident = incidentRepository.save(incident);
-
-        // 8. Monta DTO de Resposta
-        DiagnosticResultDTO resultDTO = DiagnosticResultDTO.builder()
-                .incidentId(incident.getId())
-                .podName(podName)
-                .namespace(namespace)
-                .serviceName(serviceName)
-                .severity(severity)
-                .errorReason(errorReason)
-                .rootCause(rootCause)
-                .recommendedAction(recommendedAction)
-                .technicalDetails(warningEvents)
-                .notificationSent(false)
-                .build();
 
         // 9. 👔 CONSULTA AO BUSINESS ANALYST AGENT: Avalia se é infraestrutura/deploy, inconsistência de dados ou defeito de código
         var businessVerdict = businessAnalystAgentService.evaluateIncident(resultDTO, recentLogs);
@@ -149,36 +171,32 @@ public class AiDiagnosticService {
         // Se for falha de infraestrutura/deploy -> NÃO cria PR de código e envia relatório SRE
         if (businessVerdict.type() == VerdictType.INFRASTRUCTURE_FAULT) {
             log.info("⚙️ [BusinessAnalystAgent] Falha classificada como INFRASTRUCTURE_FAULT. NÃO será aberto PR de código.");
-            emailNotificationService.sendInfrastructureAlertEmail(
+            boolean emailSent = emailNotificationService.sendInfrastructureAlertEmail(
                     serviceName,
                     businessVerdict.summary(),
                     businessVerdict.businessContext(),
                     businessVerdict.suggestedSqlAction()
             );
+            markIncidentNotified(incident, resultDTO, emailSent);
             return resultDTO;
         }
 
         // Se for inconsistência de banco/cadastro -> NÃO cria PR de código e envia relatório funcional
         if (!businessVerdict.requiresCodePr()) {
             log.info("👔 [BusinessAnalystAgent] Falha classificada como {}. NÃO será aberto PR de código.", businessVerdict.type());
-            emailNotificationService.sendDataInconsistencyEmail(
+            boolean emailSent = emailNotificationService.sendDataInconsistencyEmail(
                     serviceName,
                     businessVerdict.summary(),
                     businessVerdict.businessContext(),
                     businessVerdict.suggestedSqlAction()
             );
+            markIncidentNotified(incident, resultDTO, emailSent);
             return resultDTO;
         }
 
         // 10. Envio do E-mail de Diagnóstico Padrão de Engenharia
         boolean emailSent = emailNotificationService.sendIncidentDiagnosticEmail(resultDTO);
-        if (emailSent) {
-            incident.setStatus(IncidentStatus.NOTIFIED);
-            incident.setNotificationSent(true);
-            incident.setNotificationSentAt(LocalDateTime.now());
-            incidentRepository.save(incident);
-            resultDTO.setNotificationSent(true);
-        }
+        markIncidentNotified(incident, resultDTO, emailSent);
 
         // 11. 🤖 Acionamento da Squad Autônoma (CoderAgent + ArchitectAgent + QaAgent + ReviewerAgent)
         if (coderAgentService.isPresent() && reviewerAgentService.isPresent() && !serviceName.contains("deployment") && !serviceName.contains("busybox")) {
@@ -295,6 +313,17 @@ public class AiDiagnosticService {
         }
 
         return new String[]{rootCause, recommendedAction};
+    }
+
+    private void markIncidentNotified(Incident incident, DiagnosticResultDTO resultDTO, boolean emailSent) {
+        if (!emailSent) {
+            return;
+        }
+        incident.setStatus(IncidentStatus.NOTIFIED);
+        incident.setNotificationSent(true);
+        incident.setNotificationSentAt(LocalDateTime.now());
+        incidentRepository.save(incident);
+        resultDTO.setNotificationSent(true);
     }
 
     private IncidentSeverity evaluateSeverity(String errorReason, String logs, String podHealth) {
