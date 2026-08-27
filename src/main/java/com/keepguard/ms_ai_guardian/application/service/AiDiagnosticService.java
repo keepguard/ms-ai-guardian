@@ -70,7 +70,7 @@ public class AiDiagnosticService {
 
         // 2. Coleta de Logs e Eventos do Pod
         String podHealth = k8sInspector.describePodHealth(namespace, podName);
-        String recentLogs = k8sInspector.getPodLogs(namespace, podName, 80);
+        String recentLogs = k8sInspector.getPodLogs(namespace, podName, 20);
         List<String> warningEvents = k8sInspector.getRecentWarningEvents(namespace, podName);
 
         // 3. Avaliação da Severidade
@@ -124,8 +124,14 @@ public class AiDiagnosticService {
                     .notificationSent(false)
                     .build();
         } else {
-            // 6. Diagnóstico com IA para novo incidente
-            String aiResponse = executeAiReasoning(serviceName, podName, errorReason, podHealth, recentLogs, warningEvents);
+            // 6. Diagnóstico: panic/CODE_DEFECT não espera o Ollama (alerta não pode travar no LLM)
+            String errorHint = errorReason != null ? errorReason.toLowerCase() : "";
+            boolean knownCodeDefect = errorHint.contains("panic")
+                    || errorHint.contains("code_defect")
+                    || errorHint.contains("nullpointer");
+            String aiResponse = knownCodeDefect
+                    ? generateHeuristicAnalysis(serviceName, errorReason, recentLogs, podHealth)
+                    : executeAiReasoning(serviceName, podName, errorReason, podHealth, recentLogs, warningEvents);
             String[] parsedAnalysis = parseAiAnalysis(aiResponse);
             String rootCause = parsedAnalysis[0];
             String recommendedAction = parsedAnalysis[1];
@@ -249,8 +255,14 @@ public class AiDiagnosticService {
                Passos práticos para mitigar e resolver o problema definitivamente.
             """;
 
+        String truncatedLogs = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(recentLogs, 2500);
+        String truncatedHealth = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(podHealth, 800);
+        String truncatedEvents = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(String.join("\n", warningEvents), 800);
+        String heuristic = generateHeuristicAnalysis(serviceName, errorReason, truncatedLogs, podHealth);
+
         String userPrompt = String.format("""
-            Analise o seguinte incidente no cluster Kubernetes KeepGuard:
+            Analise o seguinte incidente no cluster Kubernetes KeepGuard.
+            Responda em no máximo 12 linhas, só com as seções [CAUSA_RAIZ] e [PLANO_DE_ACAO].
             
             Serviço: %s
             Pod: %s
@@ -266,25 +278,28 @@ public class AiDiagnosticService {
             %s
             """,
                 serviceName, podName, errorReason,
-                podHealth,
-                String.join("\n", warningEvents),
-                recentLogs
+                truncatedHealth,
+                truncatedEvents,
+                truncatedLogs
         );
 
         try {
             if (chatClientBuilder.isPresent()) {
                 ChatClient chatClient = chatClientBuilder.get().build();
-                return chatClient.prompt(new Prompt(userPrompt))
-                        .system(systemPrompt)
-                        .call()
-                        .content();
+                String llmResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
+                        () -> chatClient.prompt(new Prompt(userPrompt)).system(systemPrompt).call().content(),
+                        20,
+                        heuristic);
+                if (llmResult == heuristic) {
+                    log.warn("Ollama excedeu 20s ou falhou. Usando diagnóstico heurístico para não bloquear o e-mail.");
+                }
+                return llmResult;
             }
         } catch (Exception e) {
             log.warn("Falha ao comunicar com Ollama LLM: {}. Aplicando raciocínio heurístico inteligente de fallback.", e.getMessage());
         }
 
-        // Fallback Heurístico Robusto caso o servidor Ollama esteja indisponível
-        return generateHeuristicAnalysis(serviceName, errorReason, recentLogs, podHealth);
+        return heuristic;
     }
 
     private String generateHeuristicAnalysis(String serviceName, String errorReason, String logs, String podHealth) {

@@ -32,6 +32,7 @@ spring:
         options:
           model: ${SPRING_AI_OLLAMA_MODEL:qwen2.5-coder:1.5b}
           temperature: 0.2
+          num-predict: 256
   rabbitmq:
     host: localhost
     port: 5672

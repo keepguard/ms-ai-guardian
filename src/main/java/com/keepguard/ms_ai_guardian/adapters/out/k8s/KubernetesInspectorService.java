@@ -100,9 +100,10 @@ public class KubernetesInspectorService {
 
     public String getPodLogs(String namespace, String podName, int tailLines) {
         try {
-            return k8sClient.pods().inNamespace(namespace).withName(podName)
+            String logs = k8sClient.pods().inNamespace(namespace).withName(podName)
                     .tailingLines(tailLines)
                     .getLog();
+            return com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(logs, 4000);
         } catch (Exception e) {
             log.warn("Não foi possível obter logs do pod {}/{}: {}", namespace, podName, e.getMessage());
             return "Logs não disponíveis: " + e.getMessage();

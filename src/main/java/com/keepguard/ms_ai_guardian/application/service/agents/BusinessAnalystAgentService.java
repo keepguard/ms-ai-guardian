@@ -143,6 +143,19 @@ public class BusinessAnalystAgentService {
             );
         }
 
+        if (errorLower.contains("panic") || errorLower.contains("code_defect")
+                || errorLower.contains("nullpointer")
+                || logsLower.contains("panic recover") || logsLower.contains("code_defect_")
+                || logsLower.contains("panic_runtime")) {
+            return new BusinessVerdict(
+                    VerdictType.CODE_DEFECT,
+                    "Defeito de implementação de código identificado (" + incident.getErrorReason() + ")",
+                    "A falha decorre de uma exceção não tratada na lógica da aplicação (panic / NPE / CODE_DEFECT). Não há evidência de inconsistência cadastral.",
+                    "",
+                    true
+            );
+        }
+
         // 2. Análise com LLM (Se disponível) para casos complexos
         if (chatClientBuilder.isPresent()) {
             try {
@@ -154,10 +167,14 @@ public class BusinessAnalystAgentService {
                     Logs: %s
                     
                     Classifique se é 'DATA_INCONSISTENCY' (dado nulo/inválido no banco) ou 'CODE_DEFECT' (bug no código que requer hotfix).
-                    Responda com o diagnóstico de negócio e a tabela afetada.
-                    """, incident.getServiceName(), incident.getErrorReason(), recentLogs);
+                    Responda em no máximo 8 linhas.
+                    """, incident.getServiceName(), incident.getErrorReason(),
+                    com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(recentLogs, 1500));
 
-                String aiResult = chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content();
+                String aiResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
+                        () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
+                        15,
+                        null);
                 if (aiResult != null && aiResult.contains("DATA_INCONSISTENCY")) {
                     return new BusinessVerdict(VerdictType.DATA_INCONSISTENCY, "Inconsistência de Dados de Negócio", aiResult, "-- Inspecionar tabelas relacionais", false);
                 }

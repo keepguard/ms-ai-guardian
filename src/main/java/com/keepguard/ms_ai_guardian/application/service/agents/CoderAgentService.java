@@ -266,10 +266,14 @@ public class CoderAgentService {
                                 """,
                         serviceName.contains("gateway") ? "Golang" : "Java Spring Boot", serviceName,
                         incident.getErrorReason(), incident.getRootCause(), currentCode,
-                        stackTrace != null ? stackTrace : "");
+                        com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(stackTrace, 1500));
 
-                String aiResult = chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content();
-                if (aiResult != null && !aiResult.isBlank()) {
+                String fallback = currentCode;
+                String aiResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
+                        () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
+                        45,
+                        fallback);
+                if (aiResult != null && !aiResult.isBlank() && !aiResult.equals(fallback)) {
                     // Limpa crases markdown caso o LLM retorne formatação
                     return aiResult.replaceAll("```[a-z]*\n?", "").replaceAll("```", "").trim();
                 }
