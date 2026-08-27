@@ -87,7 +87,7 @@ public class CoderAgentService {
             String fileSha = fileInfo.get("sha");
 
             // 4. Solicita ao modelo de IA a correção precisa do código
-            String fixedCode = generateCodeFixWithAi(repoName, incident, currentCode, rawStackTrace);
+            String fixedCode = generateCodeFixWithAi(repoName, targetPath, incident, currentCode, rawStackTrace);
 
             // VALIDAÇÃO CRÍTICA: Se a correção for idêntica ao código já presente na main,
             // aborta a criação de PR vazio
@@ -252,32 +252,51 @@ public class CoderAgentService {
         return prRepository.save(pr);
     }
 
-    private String generateCodeFixWithAi(String serviceName, DiagnosticResultDTO incident, String currentCode,
-            String stackTrace) {
+    private String generateCodeFixWithAi(String serviceName, String filePath, DiagnosticResultDTO incident,
+            String currentCode, String stackTrace) {
         if (chatClientBuilder.isPresent()) {
             try {
                 log.info("🛠️ [CoderAgent] Gerando patch via LLM provider={} timeout={}s maxTokens={}",
                         llmProperties.getProvider(), llmProperties.getCodegenTimeoutSeconds(),
                         llmProperties.getMaxTokens());
+
+                var slice = com.keepguard.ms_ai_guardian.infrastructure.util.ScopedSourcePatcher.extract(
+                        currentCode, filePath, incident.getErrorReason(), incident.getRootCause());
+                String language = serviceName.contains("gateway") ? "Golang" : "Java Spring Boot";
+                String scopeHint = slice.isWholeFile()
+                        ? "o menor trecho possível do arquivo"
+                        : "SOMENTE a função/método extraído abaixo (não a classe/arquivo inteiro)";
+
+                log.info("🛠️ [CoderAgent] Escopo do hotfix: {} ({} chars de {} do arquivo)",
+                        slice.isWholeFile() ? "arquivo inteiro (fallback)" : "função isolada",
+                        slice.functionSource().length(), currentCode.length());
+
                 String prompt = String.format(
                         """
-                                Você é um programador e arquiteto de software especialista (%s). Corrija o código abaixo para solucionar o erro:
+                                Você é um programador especialista (%s) aplicando um HOTFIX PONTUAL.
 
                                 Serviço: %s
-                                Erro: %s
+                                Arquivo: %s
+                                Erro (único fluxo a corrigir): %s
                                 Causa Raiz: %s
 
-                                --- CÓDIGO ATUAL ---
+                                --- TRECHO EM ESCOPO (%s) ---
                                 %s
 
-                                --- STACKTRACE / LOGS ---
+                                --- LOGS DO INCIDENTE ---
                                 %s
 
-                                Responda APENAS com o código-fonte completo corrigido. Não inclua markdown, crases nem explicações adicionais.
+                                Regras obrigatórias:
+                                1. Corrija APENAS o caminho de execução que gerou este incidente. Não refatore a classe, não "limpe" o arquivo.
+                                2. Preserve todo código fora desse fluxo (outros cases, panics de laboratório, simulate-bug, outros numberBug).
+                                3. Se o erro for CODE_DEFECT_01 / divisão por zero na tarifação: trate rate/denominador <= 0 nesse fluxo e devolva taxa defensiva (sem panic / sem 500). Não apague os demais cenários.
+                                4. Não reescreva ProcessBatchSMS se o incidente veio de ExecuteBugScenario (e vice-versa).
+                                5. Responda APENAS com o mesmo método/função completo já corrigido. Sem markdown, sem package, sem o resto do arquivo, sem explicações.
                                 """,
-                        serviceName.contains("gateway") ? "Golang" : "Java Spring Boot", serviceName,
-                        incident.getErrorReason(), incident.getRootCause(), currentCode,
-                        com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(stackTrace, 1500));
+                        language, serviceName, filePath,
+                        incident.getErrorReason(), incident.getRootCause(),
+                        scopeHint, slice.functionSource(),
+                        com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(stackTrace, 1200));
 
                 String timeoutSentinel = "__LLM_TIMEOUT_OR_EMPTY__";
                 String aiResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
@@ -289,8 +308,11 @@ public class CoderAgentService {
                             llmProperties.getProvider());
                     return currentCode;
                 }
-                if (!aiResult.equals(currentCode)) {
-                    return aiResult.replaceAll("```[a-z]*\\n?", "").replaceAll("```", "").trim();
+
+                String patched = com.keepguard.ms_ai_guardian.infrastructure.util.ScopedSourcePatcher
+                        .applyReplacement(slice, aiResult);
+                if (!patched.equals(currentCode)) {
+                    return patched;
                 }
                 log.warn("⚠️ [CoderAgent] LLM devolveu o mesmo código da main — sem diff para commitar.");
                 return currentCode;
@@ -308,14 +330,14 @@ public class CoderAgentService {
             try {
                 String prompt = String.format(
                         """
-                                Ajuste o seguinte código de acordo com a solicitação de Code Review:
+                                Ajuste SOMENTE o trecho necessário segundo o code review. Não reescreva a classe inteira.
 
                                 Feedback do Revisor: %s
 
                                 --- CÓDIGO ATUAL ---
                                 %s
 
-                                Responda APENAS com o código completo corrigido. Sem texto antes ou depois e sem crases markdown.
+                                Responda com o arquivo completo, mas altere só o fluxo citado no feedback. Preserve o restante. Sem markdown.
                                 """,
                         feedback, currentCode);
 
@@ -425,6 +447,7 @@ public class CoderAgentService {
                 > %s
 
                 ### 💡 Ação Aplicada pelo CoderAgent
+                Hotfix **pontual** no fluxo do incidente (não é refactor da classe).
                 > %s
 
                 ---

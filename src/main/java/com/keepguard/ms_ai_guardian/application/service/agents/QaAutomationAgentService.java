@@ -33,7 +33,9 @@ public class QaAutomationAgentService {
                     || reason.isBlank();
 
             boolean testRateZeroPass = fixedCode != null && (fixedCode.contains("rate <= 0")
-                    || fixedCode.contains("if rate <= 0") || fixedCode.contains("rate == 0"));
+                    || fixedCode.contains("if rate <= 0") || fixedCode.contains("rate == 0")
+                    || (fixedCode.contains("CODE_DEFECT_01") && (fixedCode.contains("denom <= 0")
+                            || fixedCode.contains("denominator <= 0"))));
             testCases.add(new TestCaseResult(
                     "TC-01: Cálculo Tarifário com Rate Zero / Negativo",
                     "Simula envio de prioridade com taxa não configurada (rate = 0)",
