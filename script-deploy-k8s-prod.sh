@@ -65,10 +65,27 @@ kubectl set resources "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
 kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
   SPRING_PROFILES_ACTIVE=prod \
   JAVA_OPTS='-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0 -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError' \
-  APP_GUARDIAN_LLM_PROVIDER=ollama \
-  APP_GUARDIAN_OLLAMA_ENABLED=true \
-  APP_GUARDIAN_OPENAI_ENABLED=false \
-  APP_GUARDIAN_ANTHROPIC_ENABLED=false
+  APP_GUARDIAN_ANTHROPIC_ENABLED=false \
+  APP_GUARDIAN_LLM_TIMEOUT_SECONDS=45 \
+  APP_GUARDIAN_LLM_CODEGEN_TIMEOUT_SECONDS=90 \
+  APP_GUARDIAN_LLM_MAX_TOKENS=4096
+
+if kubectl get secret keepguard-openai -n "${NAMESPACE}" >/dev/null 2>&1; then
+  echo -e "${CYAN}⚙️  LLM: OpenAI (secret keepguard-openai)${NC}"
+  kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" --from=secret/keepguard-openai
+  kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
+    APP_GUARDIAN_LLM_PROVIDER=openai \
+    APP_GUARDIAN_OLLAMA_ENABLED=false \
+    APP_GUARDIAN_OPENAI_ENABLED=true \
+    SPRING_AI_OPENAI_MODEL=gpt-4o-mini
+else
+  echo -e "${YELLOW}⚙️  LLM: Ollama (secret keepguard-openai ausente)${NC}"
+  kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
+    APP_GUARDIAN_LLM_PROVIDER=ollama \
+    APP_GUARDIAN_OLLAMA_ENABLED=true \
+    APP_GUARDIAN_OPENAI_ENABLED=false \
+    APP_GUARDIAN_LLM_MAX_TOKENS=256
+fi
 
 kubectl patch "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" --type=strategic -p "$(cat <<'EOF'
 spec:
@@ -102,12 +119,7 @@ spec:
 EOF
 )"
 
-if kubectl get deploy ollama -n "${NAMESPACE}" >/dev/null 2>&1; then
-  echo -e "${CYAN}⚙️  Limitando CPU do Ollama para o nó não ficar em 98% e travar o Spring...${NC}"
-  kubectl set resources deployment/ollama -n "${NAMESPACE}" \
-    --requests=cpu=500m,memory=1536Mi \
-    --limits=cpu=1500m,memory=3Gi || true
-fi
+# Não altera o deployment do Ollama: um replica novo não cabe neste nó.
 
 # 3. Se for :latest, dispara rollout restart para forçar o download da imagem mais recente
 if [ "$VERSION" = "latest" ]; then

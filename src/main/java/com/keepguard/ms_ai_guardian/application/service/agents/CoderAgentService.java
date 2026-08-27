@@ -250,6 +250,9 @@ public class CoderAgentService {
             String stackTrace) {
         if (chatClientBuilder.isPresent()) {
             try {
+                log.info("🛠️ [CoderAgent] Gerando patch via LLM provider={} timeout={}s maxTokens={}",
+                        llmProperties.getProvider(), llmProperties.getCodegenTimeoutSeconds(),
+                        llmProperties.getMaxTokens());
                 String prompt = String.format(
                         """
                                 Você é um programador e arquiteto de software especialista (%s). Corrija o código abaixo para solucionar o erro:
@@ -270,23 +273,27 @@ public class CoderAgentService {
                         incident.getErrorReason(), incident.getRootCause(), currentCode,
                         com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(stackTrace, 1500));
 
-                String fallback = currentCode;
+                String timeoutSentinel = "__LLM_TIMEOUT_OR_EMPTY__";
                 String aiResult = com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.callWithTimeout(
                         () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
                         llmProperties.getCodegenTimeoutSeconds(),
-                        fallback);
-                if (aiResult != null && !aiResult.isBlank() && !aiResult.equals(fallback)) {
-                    // Limpa crases markdown caso o LLM retorne formatação
-                    return aiResult.replaceAll("```[a-z]*\n?", "").replaceAll("```", "").trim();
+                        timeoutSentinel);
+                if (aiResult == null || aiResult.isBlank() || timeoutSentinel.equals(aiResult)) {
+                    log.warn("⚠️ [CoderAgent] LLM {} não devolveu patch (timeout ou vazio).",
+                            llmProperties.getProvider());
+                    return currentCode;
                 }
+                if (!aiResult.equals(currentCode)) {
+                    return aiResult.replaceAll("```[a-z]*\\n?", "").replaceAll("```", "").trim();
+                }
+                log.warn("⚠️ [CoderAgent] LLM devolveu o mesmo código da main — sem diff para commitar.");
+                return currentCode;
             } catch (Exception e) {
-                log.warn("Falha no LLM ao gerar código: {}. Aplicando motor de correção heurística precisa.",
-                        e.getMessage());
+                log.warn("Falha no LLM ao gerar código: {}.", e.getMessage());
             }
         }
 
-        // Se o LLM não conseguir se comunicar, aplica raciocínio de correção automática defensiva genérica
-        log.warn("⚠️ [CoderAgent] Modelo de IA indisponível temporariamente. O agente aguardará o LLM para propor a correção sem amarras hardcoded.");
+        log.warn("⚠️ [CoderAgent] Modelo de IA indisponível. PR de hotfix não será aberto neste ciclo.");
         return currentCode;
     }
 

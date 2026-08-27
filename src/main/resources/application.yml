@@ -81,8 +81,8 @@ app:
     llm:
       # ollama (cluster) | openai | anthropic | none (só heurística, ChatClient ausente)
       provider: ${APP_GUARDIAN_LLM_PROVIDER:ollama}
-      timeout-seconds: ${APP_GUARDIAN_LLM_TIMEOUT_SECONDS:20}
-      codegen-timeout-seconds: ${APP_GUARDIAN_LLM_CODEGEN_TIMEOUT_SECONDS:45}
+      timeout-seconds: ${APP_GUARDIAN_LLM_TIMEOUT_SECONDS:45}
+      codegen-timeout-seconds: ${APP_GUARDIAN_LLM_CODEGEN_TIMEOUT_SECONDS:90}
       max-tokens: ${APP_GUARDIAN_LLM_MAX_TOKENS:256}
       temperature: ${APP_GUARDIAN_LLM_TEMPERATURE:0.2}
   rabbitmq:
