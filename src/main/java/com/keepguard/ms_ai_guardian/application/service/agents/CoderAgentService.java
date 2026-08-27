@@ -25,6 +25,7 @@ public class CoderAgentService {
     private final GitHubApiClient gitHubClient;
     private final PullRequestLifecycleRepository prRepository;
     private final com.keepguard.ms_ai_guardian.adapters.out.notification.EmailNotificationService emailNotificationService;
+    private final SourceFileResolver sourceFileResolver;
     private final SoftwareArchitectAgentService architectAgentService;
     private final QaAutomationAgentService qaAutomationAgentService;
     private final Optional<ChatClient.Builder> chatClientBuilder;
@@ -36,7 +37,6 @@ public class CoderAgentService {
      */
     public Optional<PullRequestLifecycle> createHotfixPullRequest(
             DiagnosticResultDTO incident,
-            String filePath,
             String rawStackTrace,
             BusinessAnalystAgentService.BusinessVerdict businessVerdict) {
 
@@ -79,15 +79,19 @@ public class CoderAgentService {
                 return Optional.empty();
             }
 
-            // 3. Lê o código atual do arquivo no GitHub (se o caminho foi identificado)
-            String targetPath = filePath != null && !filePath.isBlank() ? filePath
-                    : "src/main/resources/application.yml";
-            Map<String, String> fileInfo = gitHubClient.getFileContent(repoName, targetPath, baseBranch);
-            String currentCode = fileInfo.getOrDefault("content", "# Conteúdo original indisponível");
-            String fileSha = fileInfo.get("sha");
+            var resolved = sourceFileResolver.resolve(repoName, baseBranch, rawStackTrace, incident.getErrorReason());
+            if (resolved.isEmpty()) {
+                log.error("Falha ao localizar arquivo-fonte do incidente em {} a partir dos logs.", repoName);
+                return Optional.empty();
+            }
+            String targetPath = resolved.get().path();
+            String currentCode = resolved.get().content();
+            String fileSha = resolved.get().sha();
+            Integer incidentLine = resolved.get().lineNumber();
 
             // 4. Solicita ao modelo de IA a correção precisa do código
-            String fixedCode = generateCodeFixWithAi(repoName, targetPath, incident, currentCode, rawStackTrace);
+            String fixedCode = generateCodeFixWithAi(repoName, targetPath, incident, currentCode, rawStackTrace,
+                    incidentLine);
 
             // VALIDAÇÃO CRÍTICA: Se a correção for idêntica ao código já presente na main,
             // aborta a criação de PR vazio
@@ -99,8 +103,8 @@ public class CoderAgentService {
             }
 
             // 5. 🧪 QA AUTOMATION AGENT: Certifica e testa o hotfix antes de commitar
-            var qaReport = qaAutomationAgentService.certifyQuality(repoName, targetPath, fixedCode,
-                    incident.getErrorReason());
+            var qaReport = qaAutomationAgentService.certifyQuality(repoName, targetPath, currentCode, fixedCode,
+                    joinIncidentText(incident));
 
             // 6. 📐 SOFTWARE ARCHITECT AGENT: Analisa arquitetura e gera diagramas Mermaid
             // Antes vs Depois
@@ -253,7 +257,7 @@ public class CoderAgentService {
     }
 
     private String generateCodeFixWithAi(String serviceName, String filePath, DiagnosticResultDTO incident,
-            String currentCode, String stackTrace) {
+            String currentCode, String stackTrace, Integer incidentLine) {
         if (chatClientBuilder.isPresent()) {
             try {
                 log.info("🛠️ [CoderAgent] Gerando patch via LLM provider={} timeout={}s maxTokens={}",
@@ -261,8 +265,13 @@ public class CoderAgentService {
                         llmProperties.getMaxTokens());
 
                 var slice = com.keepguard.ms_ai_guardian.infrastructure.util.ScopedSourcePatcher.extract(
-                        currentCode, filePath, incident.getErrorReason(), incident.getRootCause());
-                String language = serviceName.contains("gateway") ? "Golang" : "Java Spring Boot";
+                        currentCode, filePath, incident.getErrorReason(), incident.getRootCause(), incidentLine);
+                String language = switch (com.keepguard.ms_ai_guardian.infrastructure.util.ScopedSourcePatcher
+                        .languageOf(filePath)) {
+                    case "go" -> "Golang";
+                    case "java" -> "Java";
+                    default -> "a linguagem do arquivo";
+                };
                 String scopeHint = slice.isWholeFile()
                         ? "o menor trecho possível do arquivo"
                         : "SOMENTE a função/método extraído abaixo (não a classe/arquivo inteiro)";
@@ -279,6 +288,7 @@ public class CoderAgentService {
                                 Arquivo: %s
                                 Erro (único fluxo a corrigir): %s
                                 Causa Raiz: %s
+                                Linha indicada nos logs (se houver): %s
 
                                 --- TRECHO EM ESCOPO (%s) ---
                                 %s
@@ -287,14 +297,14 @@ public class CoderAgentService {
                                 %s
 
                                 Regras obrigatórias:
-                                1. Corrija APENAS o caminho de execução que gerou este incidente. Não refatore a classe, não "limpe" o arquivo.
-                                2. Preserve todo código fora desse fluxo (outros cases, panics de laboratório, simulate-bug, outros numberBug).
-                                3. Se o erro for CODE_DEFECT_01 / divisão por zero na tarifação: trate rate/denominador <= 0 nesse fluxo e devolva taxa defensiva (sem panic / sem 500). Não apague os demais cenários.
-                                4. Não reescreva ProcessBatchSMS se o incidente veio de ExecuteBugScenario (e vice-versa).
-                                5. Responda APENAS com o mesmo método/função completo já corrigido. Sem markdown, sem package, sem o resto do arquivo, sem explicações.
+                                1. Corrija APENAS o caminho de execução que gerou este incidente. Não refatore a classe e não reescreva o arquivo.
+                                2. Preserve todo código fora desse fluxo (outros cases, outros métodos, cenários de laboratório).
+                                3. Aplique a guarda defensiva adequada ao tipo do erro (ex.: denominador inválido, nulo, índice fora do limite) só nesse fluxo.
+                                4. Responda APENAS com o mesmo método/função completo já corrigido. Sem markdown, sem package, sem o resto do arquivo, sem explicações.
                                 """,
                         language, serviceName, filePath,
                         incident.getErrorReason(), incident.getRootCause(),
+                        incidentLine != null ? incidentLine.toString() : "desconhecida",
                         scopeHint, slice.functionSource(),
                         com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter.tail(stackTrace, 1200));
 
@@ -323,6 +333,14 @@ public class CoderAgentService {
 
         log.warn("⚠️ [CoderAgent] Modelo de IA indisponível. PR de hotfix não será aberto neste ciclo.");
         return currentCode;
+    }
+
+    private static String joinIncidentText(DiagnosticResultDTO incident) {
+        if (incident == null) {
+            return "";
+        }
+        return (incident.getErrorReason() == null ? "" : incident.getErrorReason()) + " "
+                + (incident.getRootCause() == null ? "" : incident.getRootCause());
     }
 
     private String generateIterativeAdjustmentWithAi(String currentCode, String feedback) {

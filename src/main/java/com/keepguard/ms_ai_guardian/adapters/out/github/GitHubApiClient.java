@@ -87,8 +87,48 @@ public class GitHubApiClient {
     }
 
     /**
-     * Obtém o conteúdo e o SHA atual de um arquivo no repositório.
+     * Lista arquivos de código do repositório (árvore recursiva da branch).
      */
+    public List<String> listSourceFilePaths(String repoName, String branch) {
+        try {
+            String sha = getBranchSha(repoName, branch);
+            String response = restClient.get()
+                    .uri("/repos/{owner}/{repo}/git/trees/{sha}?recursive=1", githubOwner, repoName, sha)
+                    .header("Authorization", getAuthHeader())
+                    .header("Accept", "application/vnd.github+json")
+                    .retrieve()
+                    .body(String.class);
+
+            JsonNode root = objectMapper.readTree(response);
+            List<String> paths = new ArrayList<>();
+            JsonNode tree = root.path("tree");
+            if (tree.isArray()) {
+                for (JsonNode item : tree) {
+                    if (!"blob".equals(item.path("type").asText())) {
+                        continue;
+                    }
+                    String path = item.path("path").asText();
+                    if (isSourcePath(path)) {
+                        paths.add(path);
+                    }
+                }
+            }
+            return paths;
+        } catch (Exception e) {
+            log.warn("Não foi possível listar a árvore de {}/{}: {}", githubOwner, repoName, e.getMessage());
+            return List.of();
+        }
+    }
+
+    private static boolean isSourcePath(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        if (lower.contains("/vendor/") || lower.contains("/node_modules/") || lower.contains("/target/")
+                || lower.contains("/.git/") || lower.contains("/dist/")) {
+            return false;
+        }
+        return lower.endsWith(".go") || lower.endsWith(".java") || lower.endsWith(".kt")
+                || lower.endsWith(".kts");
+    }
     public Map<String, String> getFileContent(String repoName, String filePath, String branch) {
         try {
             String response = restClient.get()

@@ -25,13 +25,25 @@ public final class ScopedSourcePatcher {
     }
 
     public static Slice extract(String source, String filePath, String errorReason, String rootCause) {
+        return extract(source, filePath, errorReason, rootCause, null);
+    }
+
+    public static Slice extract(String source, String filePath, String errorReason, String rootCause,
+            Integer lineNumber) {
         if (source == null || source.isBlank()) {
             return new Slice("", "", "unknown");
         }
         String lang = languageOf(filePath);
-        List<String> functions = "go".equals(lang) ? splitGoFunctions(source) : splitJavaMethods(source);
-        if (functions.isEmpty() || functions.size() == 1 && functions.get(0).equals(source)) {
+        List<String> functions = "go".equals(lang) ? splitGoFunctions(source)
+                : "java".equals(lang) ? splitJavaMethods(source) : List.of(source);
+        if (functions.isEmpty() || (functions.size() == 1 && functions.get(0).equals(source))) {
             return new Slice(source, source, lang);
+        }
+        if (lineNumber != null && lineNumber > 0) {
+            String byLine = functionContainingLine(source, functions, lineNumber);
+            if (byLine != null) {
+                return new Slice(source, byLine, lang);
+            }
         }
         String haystack = ((errorReason == null ? "" : errorReason) + " "
                 + (rootCause == null ? "" : rootCause)).toLowerCase(Locale.ROOT);
@@ -130,17 +142,6 @@ public final class ScopedSourcePatcher {
     static int score(String function, String haystack) {
         String fn = function.toLowerCase(Locale.ROOT);
         int score = 0;
-        if (haystack.contains("code_defect_01") || haystack.contains("tarif") || haystack.contains("divis")) {
-            if (fn.contains("executebugscenario") || fn.contains("code_defect_01")) {
-                score += 50;
-            }
-            if (fn.contains("processbatchsms") && fn.contains("/ denom")) {
-                score += 20;
-            }
-        }
-        if (haystack.contains("code_defect_") && fn.contains("executebugscenario")) {
-            score += 30;
-        }
         for (String token : haystack.split("[^a-z0-9_]+")) {
             if (token.length() < 4) {
                 continue;
@@ -149,10 +150,40 @@ public final class ScopedSourcePatcher {
                 score += 3;
             }
         }
-        if (fn.contains("simulate") || fn.contains("numberbug")) {
-            score += 5;
-        }
         return score;
+    }
+
+    static String functionContainingLine(String source, List<String> functions, int lineNumber) {
+        int offset = offsetOfLine(source, lineNumber);
+        if (offset < 0) {
+            return null;
+        }
+        String best = null;
+        int bestStart = -1;
+        for (String fn : functions) {
+            int idx = source.indexOf(fn);
+            if (idx >= 0 && offset >= idx && offset < idx + fn.length() && idx >= bestStart) {
+                best = fn;
+                bestStart = idx;
+            }
+        }
+        return best;
+    }
+
+    static int offsetOfLine(String source, int lineNumber) {
+        if (lineNumber <= 1) {
+            return 0;
+        }
+        int seen = 1;
+        for (int i = 0; i < source.length(); i++) {
+            if (source.charAt(i) == '\n') {
+                seen++;
+                if (seen == lineNumber) {
+                    return Math.min(i + 1, source.length() - 1);
+                }
+            }
+        }
+        return -1;
     }
 
     static String isolateFunction(String llmOutput, String originalFunction, String language) {
@@ -197,7 +228,7 @@ public final class ScopedSourcePatcher {
         return nl < 0 ? text : text.substring(0, nl);
     }
 
-    static String languageOf(String filePath) {
+    public static String languageOf(String filePath) {
         if (filePath == null) {
             return "unknown";
         }

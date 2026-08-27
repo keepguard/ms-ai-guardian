@@ -86,4 +86,12 @@ class ScopedSourcePatcherTest {
         assertTrue(patched.contains("1000 / denom"), "fluxo fora do incidente deve permanecer");
         assertTrue(patched.contains("rate <= 0"));
     }
+
+    @Test
+    void extractsFunctionContainingTheLoggedLine() {
+        var slice = ScopedSourcePatcher.extract(FILE, "internal/core/service/sms_service.go",
+                "erro genérico", "sem tokens da função", 4);
+        assertTrue(slice.functionSource().contains("ProcessBatchSMS"));
+        assertFalse(slice.functionSource().contains("ExecuteBugScenario"));
+    }
 }

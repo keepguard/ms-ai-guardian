@@ -113,9 +113,9 @@ public class ReviewerAgentService {
                     %s
 
                     Regras:
-                    1. VEREDITO: APROVADO se o hotfix trata o incidente acima (ex.: CODE_DEFECT_01 / divisão por zero) e não introduz regressão óbvia NESSE ponto.
+                    1. VEREDITO: APROVADO se o hotfix trata o incidente acima e não introduz regressão óbvia NESSE ponto.
                     2. VEREDITO: REPROVADO somente se o incidente NÃO foi corrigido ou o patch piora a falha reportada.
-                    3. NÃO reprove por código pré-existente (simulate-bug, panics de laboratório, mocks, outros numberBug). Isso está FORA DO ESCOPO.
+                    3. NÃO reprove por código pré-existente fora desse fluxo. Isso está FORA DO ESCOPO.
                     4. Se houver outros problemas no arquivo, liste-os numa seção "Observações fora do escopo" SEM mudar o veredito para REPROVADO.
 
                     Responda começando exatamente com uma destas linhas:

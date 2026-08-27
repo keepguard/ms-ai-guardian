@@ -199,11 +199,7 @@ public class AiDiagnosticService {
         if (coderAgentService.isPresent() && reviewerAgentService.isPresent() && !serviceName.contains("deployment") && !serviceName.contains("busybox")) {
             try {
                 log.info("🛠️ Acionando CoderAgent para criar branch e Pull Request rico de hotfix...");
-                String filePath = "src/main/resources/application.yml";
-                if ("mock-sms-gateway".equalsIgnoreCase(serviceName)) {
-                    filePath = "internal/core/service/sms_service.go";
-                }
-                var prOpt = coderAgentService.get().createHotfixPullRequest(resultDTO, filePath, recentLogs, businessVerdict);
+                var prOpt = coderAgentService.get().createHotfixPullRequest(resultDTO, recentLogs, businessVerdict);
                 prOpt.ifPresent(reviewerAgentService.get()::performReview);
             } catch (Exception e) {
                 log.error("Falha ao executar pipeline Multi-Agent de hotfix: {}", e.getMessage());
@@ -218,13 +214,9 @@ public class AiDiagnosticService {
         String normalizedError = errorReason != null ? errorReason.trim().toLowerCase() : "unknown";
         String normalizedService = serviceName != null ? serviceName.trim().toLowerCase() : "unknown";
         
-        // Identifica a linha de erro/função no log se disponível
-        String location = "general";
-        if (recentLogs != null && recentLogs.contains("sms_handler.go")) {
-            location = "sms_handler.go:CalculateDiscountRate";
-        } else if (recentLogs != null && recentLogs.contains("NullPointerException")) {
-            location = "NullPointerException";
-        }
+        String location = com.keepguard.ms_ai_guardian.infrastructure.util.IncidentSourceLocator
+                .fingerprintLocation(recentLogs, errorReason)
+                .orElse("general");
 
         return org.springframework.util.DigestUtils.md5DigestAsHex(
                 (normalizedService + ":" + normalizedError + ":" + location).getBytes(java.nio.charset.StandardCharsets.UTF_8)
