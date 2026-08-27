@@ -52,7 +52,12 @@ public class KubernetesInspectorService {
         if (pod.getStatus() == null) return false;
 
         String phase = pod.getStatus().getPhase();
+        if ("Succeeded".equalsIgnoreCase(phase)) {
+            return false;
+        }
+
         if ("Failed".equalsIgnoreCase(phase) || "Unknown".equalsIgnoreCase(phase)) {
+            log.info("⚠️ Pod {} marcado como anômalo por Phase: {}", pod.getMetadata().getName(), phase);
             return true;
         }
 
@@ -88,6 +93,7 @@ public class KubernetesInspectorService {
             if (logs.contains("PANIC RECOVER") || logs.contains("NullPointerException") 
                     || logs.contains("BadSqlGrammarException") || logs.contains("CODE_DEFECT_")
                     || logs.contains("PANIC_RUNTIME")) {
+                log.info("🔥 Pod {} marcado como anômalo por detecção de padrão crítico nos logs!", pod.getMetadata().getName());
                 return true;
             }
         }

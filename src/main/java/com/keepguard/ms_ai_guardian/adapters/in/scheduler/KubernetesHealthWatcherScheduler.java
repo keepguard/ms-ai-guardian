@@ -105,6 +105,8 @@ public class KubernetesHealthWatcherScheduler {
                         ? pod.getMetadata().getLabels().get("app")
                         : podName;
 
+                log.info("🚨 [AI Guardian Watcher] Processando pod anômalo: {} (Serviço: {})", podName, serviceName);
+
                 String errorReason = "RESTART_OR_FAILURE_DETECTED";
                 if (pod.getStatus().getPhase() != null) {
                     errorReason = pod.getStatus().getPhase();
@@ -116,11 +118,13 @@ public class KubernetesHealthWatcherScheduler {
                     int idx = logs.indexOf("CODE_DEFECT_");
                     int end = logs.indexOf("\n", idx);
                     errorReason = end != -1 ? logs.substring(idx, end).trim() : logs.substring(idx, Math.min(idx + 50, logs.length()));
-                } else if (logs.contains("PANIC_RUNTIME")) {
+                } else if (logs.contains("PANIC RECOVER") || logs.contains("PANIC_RUNTIME")) {
                     errorReason = "PANIC_RUNTIME_EXCEPTION";
                 } else if (logs.contains("NullPointerException")) {
                     errorReason = "NullPointerException";
                 }
+
+                log.info("🔍 [AI Guardian Watcher] Causa identificada para {}: {}", podName, errorReason);
 
                 // Se já existir um PR aberto/pendente para este microsserviço, não dispara novo diagnóstico nem e-mails
                 boolean hasActivePr = prRepository.findAll().stream()
@@ -128,7 +132,7 @@ public class KubernetesHealthWatcherScheduler {
                                 ("OPEN".equals(pr.getStatus()) || "AI_APPROVED".equals(pr.getStatus()) || "CHANGES_REQUESTED".equals(pr.getStatus())));
 
                 if (hasActivePr) {
-                    log.debug("⏳ [AI Guardian] Microsserviço {} já possui um PR de hotfix ativo em andamento. Notificação suprimida.", serviceName);
+                    log.info("⏳ [AI Guardian] Microsserviço {} já possui um PR de hotfix ativo em andamento. Notificação suprimida.", serviceName);
                     continue;
                 }
 
