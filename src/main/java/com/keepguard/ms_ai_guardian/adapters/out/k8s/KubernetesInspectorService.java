@@ -88,7 +88,7 @@ public class KubernetesInspectorService {
         }
 
         // Inspeciona se há logs com PANIC RECOVER, CODE_DEFECT_ ou NullPointerException recentes
-        if ("Running".equalsIgnoreCase(phase)) {
+        if ("Running".equalsIgnoreCase(phase) && !pod.getMetadata().getName().startsWith("ms-ai-guardian")) {
             String logs = getPodLogs(pod.getMetadata().getNamespace(), pod.getMetadata().getName(), 25);
             if (logs.contains("PANIC RECOVER") || logs.contains("NullPointerException") 
                     || logs.contains("BadSqlGrammarException") || logs.contains("CODE_DEFECT_")
