@@ -109,6 +109,18 @@ public class KubernetesHealthWatcherScheduler {
                     errorReason = pod.getStatus().getPhase();
                 }
 
+                // Se o pod estiver Running com anomalia de log, extrai o erro específico
+                String logs = k8sInspector.getPodLogs(targetNamespace, podName, 20);
+                if (logs.contains("CODE_DEFECT_")) {
+                    int idx = logs.indexOf("CODE_DEFECT_");
+                    int end = logs.indexOf("\n", idx);
+                    errorReason = end != -1 ? logs.substring(idx, end).trim() : logs.substring(idx, Math.min(idx + 50, logs.length()));
+                } else if (logs.contains("PANIC_RUNTIME")) {
+                    errorReason = "PANIC_RUNTIME_EXCEPTION";
+                } else if (logs.contains("NullPointerException")) {
+                    errorReason = "NullPointerException";
+                }
+
                 // Se já existir um PR aberto/pendente para este microsserviço, não dispara novo diagnóstico nem e-mails
                 boolean hasActivePr = prRepository.findAll().stream()
                         .anyMatch(pr -> serviceName.equalsIgnoreCase(pr.getRepoName()) && 
