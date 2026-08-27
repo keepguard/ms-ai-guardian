@@ -450,10 +450,17 @@ public class EmailNotificationService {
     }
 
     /**
-     * HTTP no ms-communication (camelCase, contrato REST) e, se falhar, fallback
-     * direto no srv-email-google-sender com payload snake_case (tenant_id, to, html).
+     * Publica direto no srv-email-google-sender (snake_case).
+     * O HTTP do ms-communication devolve 200 ao enfileirar, mas o payload
+     * camelCase/sem tenant_id é rejeitado pelo consumidor Python — não usar como sucesso.
      */
     private boolean dispatchEmail(String subject, String htmlBody, String serviceName, String severity, String logContext) {
+        boolean published = publishToGoogleSender(subject, htmlBody, logContext);
+        if (published) {
+            return true;
+        }
+
+        log.warn("Fallback HTTP ms-communication | contexto: {}", logContext);
         Map<String, Object> communicationPayload = new HashMap<>();
         communicationPayload.put("tenantId", defaultTenantId);
         communicationPayload.put("xCorrelationId", UUID.randomUUID().toString());
@@ -471,7 +478,6 @@ public class EmailNotificationService {
         communicationPayload.put("variables", variables);
 
         try {
-            log.info("Tentando envio HTTP via ms-communication para {} | contexto: {}", defaultRecipient, logContext);
             restClient.post()
                     .uri(communicationUrl + "/api/v1/messages/send")
                     .header("X-Tenant-Id", defaultTenantId)
@@ -479,13 +485,12 @@ public class EmailNotificationService {
                     .body(communicationPayload)
                     .retrieve()
                     .toBodilessEntity();
-            log.info("✅ E-mail enviado via HTTP ms-communication para {} | contexto: {}", defaultRecipient, logContext);
+            log.warn("HTTP ms-communication aceitou, mas a entrega Gmail depende do payload na fila. contexto: {}", logContext);
             return true;
         } catch (Exception httpEx) {
-            log.warn("Falha no envio HTTP ({}), publicando fallback snake_case no srv-email-google-sender...", httpEx.getMessage());
+            log.error("Falha no envio HTTP e no RabbitMQ direto: {}", httpEx.getMessage());
+            return false;
         }
-
-        return publishToGoogleSender(subject, htmlBody, logContext);
     }
 
     private boolean publishToGoogleSender(String subject, String htmlBody, String logContext) {
