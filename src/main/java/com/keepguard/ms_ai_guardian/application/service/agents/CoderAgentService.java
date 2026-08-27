@@ -252,13 +252,21 @@ public class CoderAgentService {
         if ("mock-sms-gateway".equalsIgnoreCase(serviceName)) {
             String error = incident.getErrorReason() != null ? incident.getErrorReason() : "";
             
-            // Extrai o número do bug ou identifica a linha de falha do switch
+            // 1. Correção para falha de divisão por zero em ProcessBatchSMS
+            if (error.contains("PANIC") || error.contains("integer divide by zero") || (stackTrace != null && stackTrace.contains("integer divide by zero"))) {
+                String faultyBlock = "denom := int(callIdx - 1)\n\t\trate := 1000 / denom";
+                String safeBlock = "// [KeepGuard AI Guardian Hotfix]: Protecao contra divisao por zero\n\t\tdenom := int(callIdx - 1)\n\t\tif denom == 0 {\n\t\t\tdenom = 1\n\t\t}\n\t\trate := 1000 / denom";
+                if (currentCode.contains(faultyBlock)) {
+                    log.info("🛠️ [CoderAgent] Aplicando correção de divisão por zero em ProcessBatchSMS (sms_service.go)");
+                    return currentCode.replace(faultyBlock, safeBlock);
+                }
+            }
+
+            // 2. Extrai o número do bug ou identifica a linha de falha do switch SimulateBug
             if (error.contains("CODE_DEFECT_")) {
                 try {
                     String defectTag = error.substring(error.indexOf("CODE_DEFECT_"), error.indexOf("CODE_DEFECT_") + 14);
                     int bugNum = Integer.parseInt(defectTag.replace("CODE_DEFECT_", "").trim());
-
-                    String targetFaultyCase = String.format("case %d:\n\t\treturn nil, fmt.Errorf(\"%s", bugNum, defectTag);
                     
                     // Procura o case problemático no código e o substitui por uma resolução segura e defensiva
                     int caseIdx = currentCode.indexOf("case " + bugNum + ":");
