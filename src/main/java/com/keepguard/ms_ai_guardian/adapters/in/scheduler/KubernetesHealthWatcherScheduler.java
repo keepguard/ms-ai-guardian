@@ -98,6 +98,7 @@ public class KubernetesHealthWatcherScheduler {
         try {
             // 1. Inspeciona Pods com anomalias/restarts
             List<Pod> unhealthyPods = k8sInspector.listUnhealthyPods(targetNamespace);
+            log.info("🔍 [AI Guardian Watcher] Varredura do cluster (namespace: {}). Pods anômalos detectados: {}", targetNamespace, unhealthyPods.size());
             for (Pod pod : unhealthyPods) {
                 String podName = pod.getMetadata().getName();
                 String serviceName = pod.getMetadata().getLabels() != null && pod.getMetadata().getLabels().containsKey("app")
