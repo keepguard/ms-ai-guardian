@@ -61,12 +61,9 @@ public class KubernetesInspectorService {
             return true;
         }
 
-        // Verifica status dos containers
+        // Verifica status dos containers (apenas estados de erro ativo)
         if (pod.getStatus().getContainerStatuses() != null) {
             for (ContainerStatus status : pod.getStatus().getContainerStatuses()) {
-                if (status.getRestartCount() != null && status.getRestartCount() > 0) {
-                    return true;
-                }
                 if (status.getState() != null) {
                     if (status.getState().getWaiting() != null) {
                         String reason = status.getState().getWaiting().getReason();
