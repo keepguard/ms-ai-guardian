@@ -30,7 +30,7 @@ spring:
       base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://ollama:11434}
       chat:
         options:
-          model: deepseek-r1:latest
+          model: ${SPRING_AI_OLLAMA_MODEL:qwen2.5-coder:1.5b}
           temperature: 0.2
   rabbitmq:
     host: localhost
