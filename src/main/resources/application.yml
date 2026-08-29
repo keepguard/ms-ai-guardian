@@ -27,8 +27,8 @@ spring:
         default_schema: ms_ai_guardian
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:${REDIS_HOST:localhost}}
-      port: ${SPRING_DATA_REDIS_PORT:${REDIS_PORT:6379}}
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
       timeout: 3000ms
       lettuce:
         pool:
