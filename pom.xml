@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.keepguard</groupId>
 	<artifactId>ms-ai-guardian</artifactId>
-	<version>1.0.32</version>
+	<version>1.0.33</version>
 	<name>ms-ai-guardian</name>
 	<description>KeepGuard AI Guardian - Intelligent Kubernetes Diagnostics and Incident Reasoning Agent</description>
 

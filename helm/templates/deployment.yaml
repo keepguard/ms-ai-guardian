@@ -51,6 +51,8 @@ spec:
           value: {{ .Values.env.rabbitmqHost | quote }}
         - name: RABBITMQ_PORT
           value: {{ .Values.env.rabbitmqPort | quote }}
+        - name: KEEPGUARD_AUDIT_EXCHANGE
+          value: "srv-audit-exchange-prod"
         - name: APP_GUARDIAN_DEFAULT_RECIPIENT
           value: {{ .Values.env.defaultRecipient | quote }}
         - name: APP_GUARDIAN_NAMESPACE

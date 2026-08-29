@@ -94,7 +94,7 @@ app:
 keepguard:
   audit:
     enabled: true
-    exchange: srv-audit-exchange-dev
+    exchange: ${KEEPGUARD_AUDIT_EXCHANGE:srv-audit-exchange-dev}
     routing-key: audit.event
     source-service: ms-ai-guardian
 
