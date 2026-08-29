@@ -535,15 +535,17 @@ public class EmailNotificationService {
      * camelCase/sem tenant_id é rejeitado pelo consumidor Python — não usar como sucesso.
      */
     private boolean dispatchEmail(String subject, String htmlBody, String serviceName, String severity, String logContext) {
-        boolean published = publishToGoogleSender(subject, htmlBody, logContext);
+        String correlationId = UUID.randomUUID().toString();
+        boolean published = publishToGoogleSender(subject, htmlBody, logContext, correlationId);
         if (published) {
             return true;
         }
 
         log.warn("Fallback HTTP ms-communication | contexto: {}", logContext);
         Map<String, Object> communicationPayload = new HashMap<>();
-        communicationPayload.put("tenantId", defaultTenantId);
-        communicationPayload.put("xCorrelationId", UUID.randomUUID().toString());
+        communicationPayload.put("companyId", defaultTenantId);
+        communicationPayload.put("correlationId", correlationId);
+        communicationPayload.put("xCorrelationId", correlationId);
         communicationPayload.put("messageType", "EMAIL");
         communicationPayload.put("recipient", defaultRecipient);
         communicationPayload.put("templateType", "ALERTA_SEGURANCA");
@@ -560,7 +562,8 @@ public class EmailNotificationService {
         try {
             restClient.post()
                     .uri(communicationUrl + "/api/v1/messages/send")
-                    .header("X-Tenant-Id", defaultTenantId)
+                    .header("X-Company-Id", defaultTenantId)
+                    .header("X-Correlation-ID", correlationId)
                     .header("Content-Type", "application/json")
                     .body(communicationPayload)
                     .retrieve()
@@ -573,11 +576,12 @@ public class EmailNotificationService {
         }
     }
 
-    private boolean publishToGoogleSender(String subject, String htmlBody, String logContext) {
+    private boolean publishToGoogleSender(String subject, String htmlBody, String logContext, String correlationId) {
         try {
             Map<String, Object> payload = new HashMap<>();
             payload.put("tenant_id", defaultTenantId);
-            payload.put("x_correlation_id", UUID.randomUUID().toString());
+            payload.put("x_correlation_id", correlationId);
+            payload.put("correlationId", correlationId);
             payload.put("to", defaultRecipient);
             payload.put("subject", subject);
             payload.put("html", htmlBody);
