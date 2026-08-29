@@ -6,7 +6,8 @@ import com.keepguard.ms_ai_guardian.application.dto.ClusterFacts;
 import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
 import com.keepguard.ms_ai_guardian.application.dto.LlmInvestigationResult;
 import com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService;
-import com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService.VerdictType;
+import com.keepguard.ms_ai_guardian.domain.enums.ClassificationVerdict;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import com.keepguard.ms_ai_guardian.application.service.sre.AlertFanoutService;
 import com.keepguard.ms_ai_guardian.application.service.sre.IncidentInvestigationRecorder;
 import com.keepguard.ms_ai_guardian.application.service.sre.IncidentLifecycleService;
@@ -19,7 +20,6 @@ import com.keepguard.ms_ai_guardian.domain.repository.IncidentActionSuggestionRe
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -43,12 +43,7 @@ public class AiDiagnosticService {
     private final AlertFanoutService alertFanoutService;
     private final IncidentActionSuggestionRepository suggestionRepository;
     private final GuardianAuditPublisher auditPublisher;
-
-    @Value("${app.guardian.anti-flapping-cooldown-minutes:15}")
-    private int cooldownMinutes;
-
-    @Value("${app.guardian.default-recipient:rafael.nogueira2009@gmail.com}")
-    private String defaultRecipient;
+    private final GuardianProperties guardianProperties;
 
     public DiagnosticResultDTO diagnosePod(String namespace, String podName, String serviceName, String errorReason, boolean forceSendEmail) {
         log.info("Iniciando diagnóstico inteligente para pod: {}/{} | Serviço: {}", namespace, podName, serviceName);
@@ -120,7 +115,7 @@ public class AiDiagnosticService {
             resultDTO.setNotificationSent(true);
         }
 
-        if (businessVerdict.type() == VerdictType.INFRASTRUCTURE_FAULT || !businessVerdict.requiresCodePr()) {
+        if (businessVerdict.type() == ClassificationVerdict.INFRASTRUCTURE_FAULT || !businessVerdict.requiresCodePr()) {
             log.info("BusinessAnalystAgent classificou {}. PR de código não será aberto.", businessVerdict.type());
             return resultDTO;
         }
@@ -151,7 +146,7 @@ public class AiDiagnosticService {
                 .lastSeenAt(LocalDateTime.now())
                 .capturedLogsSnippet(recentLogs.length() > 3000 ? recentLogs.substring(recentLogs.length() - 3000) : recentLogs)
                 .status(IncidentStatus.DETECTED)
-                .targetRecipientEmail(defaultRecipient)
+                .targetRecipientEmail(guardianProperties.getDefaultRecipient())
                 .notificationSent(false)
                 .correlationId(UUID.randomUUID().toString())
                 .healthyStreak(0)

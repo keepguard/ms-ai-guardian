@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>⚙️ Incidente de Infraestrutura / Orquestração K8s</h1>
+      <p>Serviço: {{serviceName}} • Diagnóstico SRE / DevOps</p>
+    </div>
+    <div class="content">
+      <p>Olá {{approverDisplayName}},</p>
+      <p>O <strong>AI Guardian</strong> detectou um evento operacional a nível de container/Kubernetes no serviço <strong>{{serviceName}}</strong>.</p>
+      <div class="box">
+        <strong>Diagnóstico:</strong> {{summary}}<br/><br/>
+        <strong>Contexto Operacional:</strong><br/>{{context}}
+      </div>
+      <p>🛡️ <strong>Ação do Sistema:</strong> Este incidente foi classificado como falha de infraestrutura/deploy. Nenhum Pull Request de código-fonte foi gerado desnecessariamente.</p>
+      <p><strong>Ação Recomendada:</strong></p>
+      <div style="background: #1e293b; color: #f8fafc; padding: 12px 16px; border-radius: 6px; font-family: monospace; font-size: 13px;">
+        {{suggestedAction}}
+      </div>
+    </div>
+    <div class="footer">KeepGuard Multi-Agent System • SRE & Infrastructure Intelligence</div>
+  </div>
+</body>
+</html>

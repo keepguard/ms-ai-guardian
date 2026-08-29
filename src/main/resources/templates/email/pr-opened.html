@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>🛠️ CoderAgent abriu um Pull Request</h1>
+      <p>Hotfix gerado a partir do diagnóstico do incidente</p>
+    </div>
+    <div class="content">
+      <div>
+        <span class="badge">Serviço: <strong>{{repoName}}</strong></span>
+        <span class="badge">PR <strong>#{{prNumber}}</strong></span>
+        <span class="badge">Branch: <strong>{{branchName}}</strong></span>
+      </div>
+      <div class="section-title">Incidente</div>
+      <div class="box">
+        <strong>Erro:</strong> {{errorReason}}<br/>
+        <strong>Causa raiz:</strong> {{rootCause}}<br/>
+        <strong>Arquivo:</strong> {{filePath}}
+      </div>
+      <div class="section-title">Ação recomendada</div>
+      <div class="box">{{recommendedAction}}</div>
+      <p>O ReviewerAgent segue a análise no GitHub. Para revisar o diff e fazer o merge:</p>
+      <a href="{{prUrl}}" class="btn" target="_blank">🔗 Abrir Pull Request #{{prNumber}}</a>
+    </div>
+    <div class="footer">KeepGuard Multi-Agent System • Diagnóstico → PR → Review humano</div>
+  </div>
+</body>
+</html>

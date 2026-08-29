@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>🧐 ReviewerAgent Aprovou o Hotfix!</h1>
+      <p>O PR #{{prNumber}} do serviço <strong>{{repoName}}</strong> passou na revisão da IA e aguarda o Merge.</p>
+    </div>
+    <div class="content">
+      <p>Olá {{approverDisplayName}},</p>
+      <p>O <strong>CoderAgent</strong> abriu o Pull Request e o <strong>ReviewerAgent</strong> realizou a análise técnica de segurança e arquitetura.</p>
+      <div class="box">
+        <strong>Parecer do ReviewerAgent:</strong><br/>
+        {{aiFeedback}}
+      </div>
+      <p>Para concluir a aplicação do hotfix e disparar o deploy no Kubernetes, faça a revisão e o merge no GitHub:</p>
+      <a href="{{prUrl}}" class="btn" target="_blank">🔗 Acessar Pull Request #{{prNumber}} no GitHub</a>
+    </div>
+    <div class="footer">KeepGuard Multi-Agent System • Quality Gate Humano Obrigatório</div>
+  </div>
+</body>
+</html>

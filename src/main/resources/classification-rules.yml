@@ -1,0 +1,107 @@
+rules:
+  - id: infra-orchestration
+    priority: 10
+    verdict: INFRASTRUCTURE_FAULT
+    requiresCodePr: false
+    enabled: true
+    errorContains:
+      - pending
+      - imagepullbackoff
+      - errimagepull
+      - containercreating
+      - createcontainerconfigerror
+      - oomkilled
+      - service_outage_zero_replicas
+    logsContains:
+      - failed to pull and unpack image
+      - no match for platform in manifest
+      - connection refused
+      - dial tcp
+    summaryTemplate: "Falha operacional de infraestrutura / deploy ({{errorReason}})"
+    explanationTemplate: |
+      ⚙️ **Incidente de Infraestrutura / Deploy / Orquestração Kubernetes**:
+      O Pod/Container apresentou anomalia a nível de cluster, imagem Docker ou agendamento (ex: {{errorReason}}).
+      Não há evidências de defeito na lógica interna da aplicação. Esta falha requer intervenção SRE/DevOps.
+    suggestedActionTemplate: "-- Inspecionar kubectl describe pod / imagens no GHCR / recursos do nó"
+
+  - id: tenant-not-found
+    priority: 20
+    verdict: DATA_INCONSISTENCY
+    requiresCodePr: false
+    enabled: true
+    errorContains:
+      - tenant not found
+    logsContains:
+      - autenticar tenant
+      - empresa/tenant não encontrado
+      - auth_tenant_not_found
+    summaryTemplate: "Tenant / API Key não cadastrada na tabela companies"
+    explanationTemplate: |
+      ❌ **Falha de Cadastro / Inconsistência de Dados**:
+      A API Key enviada na requisição não foi encontrada na tabela `companies`.
+      Este não é um defeito de código, mas sim um tenant/empresa não provisionada ou chave expirada.
+    suggestedActionTemplate: "-- Provisionar o tenant/empresa na tabela companies (não executar SQL automaticamente)."
+
+  - id: tenant-blocked
+    priority: 30
+    verdict: BUSINESS_RULE_VIOLATION
+    requiresCodePr: false
+    enabled: true
+    errorContains:
+      - blocked
+    logsContains:
+      - empresa está bloqueada
+      - tenant_blocked
+    summaryTemplate: "Empresa bloqueada por regra de crédito ou segurança"
+    explanationTemplate: |
+      ⚠️ **Violação de Regra de Negócio (Inadimplência / Bloqueio)**:
+      A empresa associada à requisição está marcada como `BLOCKED`. O serviço rejeitou o lote corretamente conforme as políticas de crédito.
+    suggestedActionTemplate: "-- Revisar status cadastral da empresa (não executar UPDATE automaticamente)."
+
+  - id: insufficient-credits
+    priority: 40
+    verdict: BUSINESS_RULE_VIOLATION
+    requiresCodePr: false
+    enabled: true
+    errorContains: []
+    logsContains:
+      - saldo de créditos sms insuficiente
+      - insufficient_credits
+    summaryTemplate: "Saldo de créditos insuficiente"
+    explanationTemplate: |
+      💰 **Saldo de Créditos Excedido**:
+      A empresa não possui saldo suficiente para processar a quantidade solicitada. O bloqueio é esperado pelo domínio financeiro.
+    suggestedActionTemplate: "-- Recarga operacional de créditos (não executar UPDATE automaticamente)."
+
+  - id: no-carrier-route
+    priority: 50
+    verdict: DATA_INCONSISTENCY
+    requiresCodePr: false
+    enabled: true
+    errorContains: []
+    logsContains:
+      - nenhuma rota de operadora
+      - no_carrier_route
+    summaryTemplate: "Matriz de roteamento sem operadora ativa para a prioridade solicitada"
+    explanationTemplate: |
+      📡 **Inconsistência na Matriz de Roteamento**:
+      Não existe nenhuma rota ativa vinculada ao nível de prioridade solicitado pela empresa.
+    suggestedActionTemplate: "-- Provisionar rota de operadora ativa (não executar INSERT automaticamente)."
+
+  - id: code-defect-panic
+    priority: 60
+    verdict: CODE_DEFECT
+    requiresCodePr: true
+    enabled: true
+    errorContains:
+      - panic
+      - code_defect
+      - nullpointer
+    logsContains:
+      - panic recover
+      - code_defect_
+      - panic_runtime
+    summaryTemplate: "Defeito de implementação de código identificado ({{errorReason}})"
+    explanationTemplate: |
+      A falha decorre de uma exceção não tratada na lógica da aplicação (panic / NPE / CODE_DEFECT). Não há evidência de inconsistência cadastral.
+    suggestedActionTemplate: ""

@@ -11,6 +11,10 @@ spring:
     port: 5672
     username: guest
     password: guest
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
   ai:
     ollama:
       base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://ollama:11434}

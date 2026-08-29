@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>🤖 CoderAgent Respondeu ao seu Feedback</h1>
+      <p>Repositório: {{repoName}} • Pull Request #{{prNumber}}</p>
+    </div>
+    <div class="content">
+      <p>Olá {{approverDisplayName}},</p>
+      <p>O <strong>CoderAgent</strong> processou seu feedback de Code Review enviado por <strong>@{{author}}</strong>:</p>
+      <div class="box" style="font-style: italic;">
+        <strong>Seu Comentário:</strong><br/>"{{userComment}}"
+      </div>
+      <div style="margin: 16px 0;">{{badgeHtml}}</div>
+      <div class="action-box">
+        <strong>Resposta do CoderAgent:</strong><br/>{{agentResponse}}
+      </div>
+      <a href="{{prUrl}}" class="btn">Ver Thread no GitHub (PR #{{prNumber}})</a>
+    </div>
+    <div class="footer">KeepGuard Multi-Agent System • Code Review Interativo</div>
+  </div>
+</body>
+</html>

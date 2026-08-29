@@ -1,0 +1,3 @@
+⚠️ **[ReviewerAgent] PARECER TÉCNICO: HOTFIX INSUFICIENTE PARA O INCIDENTE**
+
+{{feedback}}

@@ -7,11 +7,12 @@ import com.keepguard.ms_ai_guardian.domain.entity.IncidentActionSuggestion;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentAlertDelivery;
 import com.keepguard.ms_ai_guardian.domain.enums.DeliveryOutcome;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentAlertDeliveryRepository;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -22,9 +23,7 @@ public class AlertFanoutService {
     private final AlertRecipientService recipientService;
     private final EmailNotificationService emailNotificationService;
     private final IncidentAlertDeliveryRepository deliveryRepository;
-
-    @Value("${app.guardian.console-url:https://app.keepguard.com.br}")
-    private String consoleUrl;
+    private final GuardianProperties properties;
 
     public boolean fanoutOpened(Incident incident, List<IncidentActionSuggestion> suggestions) {
         String enabled = suggestions.stream()
@@ -34,7 +33,7 @@ public class AlertFanoutService {
         if (enabled.isBlank()) {
             enabled = "Nenhuma ação habilitada pela política — abrir a mesa para detalhes.";
         }
-        String cta = consoleUrl + "?tab=guardian";
+        String cta = properties.getConsoleUrl() + "?tab=guardian";
         String html = mesaHtml(
                 "Incidente aberto: " + incident.getServiceName(),
                 incident,
@@ -54,7 +53,7 @@ public class AlertFanoutService {
                 "O watcher confirmou saúde em " + incident.getHealthyStreak() + " varreduras consecutivas.",
                 incident.getAiSummary() != null ? incident.getAiSummary() : "",
                 "Ver incidente",
-                consoleUrl + "?tab=guardian");
+                properties.getConsoleUrl() + "?tab=guardian");
         String subject = "[KeepGuard Guardian] Normalizado: " + incident.getServiceName();
         return fanout(incident, "NORMALIZED", subject, html);
     }
@@ -66,7 +65,7 @@ public class AlertFanoutService {
                 "Uma ação humana foi aplicada no cluster.",
                 "Resultado: " + outcome,
                 "Ver incidente",
-                consoleUrl + "?tab=guardian");
+                properties.getConsoleUrl() + "?tab=guardian");
         String subject = "[KeepGuard Guardian] Ação " + actionLabel + " — " + incident.getServiceName();
         return fanout(incident, "ACTION", subject, html);
     }
@@ -92,26 +91,16 @@ public class AlertFanoutService {
     }
 
     private String mesaHtml(String title, Incident incident, String body, String extra, String ctaLabel, String ctaUrl) {
-        return """
-            <!DOCTYPE html>
-            <html lang="pt-BR"><body style="font-family:Segoe UI,sans-serif;background:#f8fafc;padding:20px;">
-            <div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;border:1px solid #e2e8f0;">
-              <h1 style="font-size:18px;">%s</h1>
-              <p><strong>Serviço:</strong> %s &nbsp; <strong>Pod:</strong> %s</p>
-              <p><strong>Conclusão K8s:</strong> %s</p>
-              <p>%s</p>
-              <p>%s</p>
-              <p><a href="%s" style="display:inline-block;padding:10px 18px;background:#0f766e;color:#fff;text-decoration:none;border-radius:8px;">%s</a></p>
-            </div></body></html>
-            """.formatted(
-                title,
-                n(incident.getServiceName()),
-                n(incident.getPodName()),
-                n(incident.getK8sConclusion()),
-                n(body).replace("\n", "<br/>"),
-                n(extra).replace("\n", "<br/>"),
-                ctaUrl,
-                ctaLabel);
+        return emailNotificationService.renderMesa(Map.of(
+                "title", n(title),
+                "serviceName", n(incident.getServiceName()),
+                "podName", n(incident.getPodName()),
+                "k8sConclusion", n(incident.getK8sConclusion()),
+                "body", n(body).replace("\n", "<br/>"),
+                "extra", n(extra).replace("\n", "<br/>"),
+                "ctaUrl", ctaUrl,
+                "ctaLabel", ctaLabel
+        ));
     }
 
     private static String n(String value) {

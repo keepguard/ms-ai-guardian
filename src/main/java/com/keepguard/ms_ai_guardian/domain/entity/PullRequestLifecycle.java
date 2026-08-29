@@ -1,5 +1,6 @@
 package com.keepguard.ms_ai_guardian.domain.entity;
 
+import com.keepguard.ms_ai_guardian.domain.enums.PullRequestStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -63,8 +64,9 @@ public class PullRequestLifecycle {
     @Column(name = "last_processed_comment_id")
     private String lastProcessedCommentId;
 
-    @Column(name = "status", nullable = false)
-    private String status; // OPEN, CHANGES_REQUESTED, AI_APPROVED, MERGED_BY_HUMAN, DEPLOYED
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
+    private PullRequestStatus status;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

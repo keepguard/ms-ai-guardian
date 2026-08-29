@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>🛡️ KeepGuard AI Guardian - Diagnóstico de Incidente</h1>
+      <p>Análise automatizada de causa raiz executada por IA</p>
+    </div>
+    <div class="content">
+      <div>
+        <span class="badge">Serviço: <strong>{{serviceName}}</strong></span>
+        <span class="badge">Pod: <strong>{{podName}}</strong></span>
+        <span class="badge" style="background: {{headerColor}}; color: white;">Severidade: <strong>{{severity}}</strong></span>
+      </div>
+      <div class="section-title">🔍 Causa Raiz Identificada</div>
+      <div class="box">{{rootCause}}</div>
+      <div class="section-title">💡 Plano de Ação Recomendado</div>
+      <div class="action-box">{{recommendedAction}}</div>
+    </div>
+    <div class="footer">KeepGuard Observability & Self-Healing AI Agent • Gerado em {{generatedAt}}</div>
+  </div>
+</body>
+</html>

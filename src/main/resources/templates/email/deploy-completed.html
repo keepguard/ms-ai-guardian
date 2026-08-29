@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>🚀 Hotfix em Produção com Sucesso!</h1>
+      <p>Deploy e Rollout concluídos no namespace KeepGuard.</p>
+    </div>
+    <div class="content">
+      <p>Olá {{approverDisplayName}},</p>
+      <p>O Merge do PR #{{prNumber}} foi efetuado por <strong>@{{mergedBy}}</strong>.</p>
+      <p>O <strong>DeployerAgent</strong> assumiu o processo e aplicou o rollout com sucesso no cluster Kubernetes.</p>
+      <p>Status do Serviço <strong>{{repoName}}</strong>: <span style="color: #16a34a; font-weight: 700;">● Online & Estável</span></p>
+    </div>
+    <div class="footer">KeepGuard Multi-Agent Autonomous Pipeline • Ciclo Finalizado</div>
+  </div>
+</body>
+</html>

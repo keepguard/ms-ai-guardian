@@ -16,7 +16,8 @@ import com.keepguard.ms_ai_guardian.domain.enums.RemediationActionType;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentActionExecutionRepository;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentActionSuggestionRepository;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
-import com.keepguard.ms_ai_guardian.infrastructure.lock.DistributedDeployLockService;
+import com.keepguard.ms_ai_guardian.application.port.out.cache.DistributedLockPort;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,7 +34,8 @@ public class IncidentRemediationService {
     private final IncidentActionSuggestionRepository suggestionRepository;
     private final IncidentActionExecutionRepository executionRepository;
     private final KubernetesInspectorService k8sInspector;
-    private final DistributedDeployLockService deployLockService;
+    private final DistributedLockPort deployLock;
+    private final GuardianProperties properties;
     private final IncidentLifecycleService lifecycleService;
     private final AlertFanoutService alertFanoutService;
     private final GuardianAuditPublisher auditPublisher;
@@ -80,7 +82,7 @@ public class IncidentRemediationService {
         }
 
         String lockId = "remediation_" + incidentId + "_" + System.currentTimeMillis();
-        if (!deployLockService.tryAcquireDeployLock(incident.getServiceName(), lockId)) {
+        if (!deployLock.tryAcquire("deploy:" + incident.getServiceName(), lockId, properties.getRedis().getLockTtlSeconds())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe um rollout em andamento para este serviço");
         }
         try {
@@ -108,7 +110,7 @@ public class IncidentRemediationService {
             alertFanoutService.fanoutAction(incident, suggestion.getLabel(), "FAILURE");
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Falha ao aplicar ação no cluster: " + e.getMessage());
         } finally {
-            deployLockService.releaseDeployLock(incident.getServiceName());
+            deployLock.release("deploy:" + incident.getServiceName(), lockId);
         }
     }
 

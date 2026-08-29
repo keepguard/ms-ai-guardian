@@ -1,0 +1,3 @@
+- **Arquivo afetado:** `{{file}}`
+- **Incidente:** {{error}}
+- **Abordagem:** hotfix só no fluxo que falhou; demais caminhos do arquivo permanecem.

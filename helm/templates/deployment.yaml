@@ -47,6 +47,14 @@ spec:
           value: {{ .Values.env.rabbitmqHost | quote }}
         - name: SPRING_RABBITMQ_PORT
           value: {{ .Values.env.rabbitmqPort | quote }}
+        - name: SPRING_DATA_REDIS_HOST
+          value: {{ .Values.env.redisHost | quote }}
+        - name: SPRING_DATA_REDIS_PORT
+          value: {{ .Values.env.redisPort | quote }}
+        - name: REDIS_HOST
+          value: {{ .Values.env.redisHost | quote }}
+        - name: REDIS_PORT
+          value: {{ .Values.env.redisPort | quote }}
         - name: RABBITMQ_HOST
           value: {{ .Values.env.rabbitmqHost | quote }}
         - name: RABBITMQ_PORT
@@ -55,6 +63,12 @@ spec:
           value: "srv-audit-exchange-prod"
         - name: APP_GUARDIAN_DEFAULT_RECIPIENT
           value: {{ .Values.env.defaultRecipient | quote }}
+        - name: APP_GUARDIAN_TENANT_ID
+          value: {{ .Values.env.tenantId | quote }}
+        - name: APP_GUARDIAN_APPROVER_GITHUB
+          value: {{ .Values.env.approverGithub | quote }}
+        - name: APP_GUARDIAN_APPROVER_DISPLAY_NAME
+          value: {{ .Values.env.approverDisplayName | quote }}
         - name: APP_GUARDIAN_NAMESPACE
           value: {{ .Values.env.namespace | quote }}
         - name: APP_GUARDIAN_WATCHER_ENABLED

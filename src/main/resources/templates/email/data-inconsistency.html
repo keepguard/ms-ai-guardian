@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>👔 Diagnóstico de Negócio & Banco de Dados</h1>
+      <p>Serviço: {{serviceName}} • Ação Operacional Recomendada</p>
+    </div>
+    <div class="content">
+      <p>Olá {{approverDisplayName}},</p>
+      <p>O <strong>BusinessAnalystAgent</strong> identificou que o erro ocorrido no serviço <strong>{{serviceName}}</strong> é decorrente de uma <strong>inconsistência de dados ou regra de negócio</strong> e <u>não de um defeito no código-fonte</u>.</p>
+      <div class="box">
+        <strong>Motivo Identificado:</strong> {{summary}}<br/><br/>
+        <strong>Contexto Funcional:</strong><br/>{{businessContext}}
+      </div>
+      <p>🛡️ <strong>Ação do Sistema:</strong> Nenhum Pull Request de código foi gerado desnecessariamente.</p>
+      <p><strong>Sugestão de Ação / Script SQL Corretivo:</strong></p>
+      {{sqlBlock}}
+    </div>
+    <div class="footer">KeepGuard Multi-Agent System • Business & Database Intelligence</div>
+  </div>
+</body>
+</html>

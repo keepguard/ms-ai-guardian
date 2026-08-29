@@ -4,47 +4,70 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keepguard.ms_ai_guardian.application.dto.ClusterFacts;
 import com.keepguard.ms_ai_guardian.application.dto.LlmInvestigationResult;
+import com.keepguard.ms_ai_guardian.application.port.out.llm.LlmPort;
+import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptCatalogPort;
+import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptKeys;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LlmInvestigationService {
 
-    private final Optional<ChatClient.Builder> chatClientBuilder;
+    private final LlmPort llmPort;
+    private final PromptCatalogPort prompts;
     private final GuardianLlmProperties llmProperties;
     private final ObjectMapper objectMapper;
 
     public LlmInvestigationResult investigate(ClusterFacts facts, String errorReason) {
         LlmInvestigationResult heuristic = heuristic(facts, errorReason);
-        if (chatClientBuilder.isEmpty() || !llmProperties.isEnabled()) {
+        if (!llmPort.available()) {
             heuristic.setHeuristicFallback(true);
             return heuristic;
         }
         try {
-            String prompt = buildPrompt(facts, errorReason);
-            String sentinel = "__LLM_TIMEOUT_OR_EMPTY__";
-            String raw = LlmContextLimiter.callWithTimeout(
-                    () -> chatClientBuilder.get().build().prompt(new Prompt(prompt)).call().content(),
-                    llmProperties.getTimeoutSeconds(),
-                    sentinel);
-            if (raw == null || raw.isBlank() || sentinel.equals(raw)) {
-                heuristic.setHeuristicFallback(true);
-                return heuristic;
-            }
-            LlmInvestigationResult parsed = parse(raw, heuristic);
-            parsed.setHeuristicFallback(false);
-            return parsed;
+            var snap = prompts.snapshot(PromptKeys.SRE_INVESTIGATE);
+            Map<String, String> vars = new HashMap<>();
+            vars.put("errorReason", nvl(errorReason));
+            vars.put("namespace", nvl(facts.getNamespace()));
+            vars.put("serviceName", nvl(facts.getServiceName()));
+            vars.put("podName", nvl(facts.getPodName()));
+            vars.put("deploymentName", nvl(facts.getDeploymentName()));
+            vars.put("desiredReplicas", String.valueOf(facts.getDesiredReplicas()));
+            vars.put("availableReplicas", String.valueOf(facts.getAvailableReplicas()));
+            vars.put("readyReplicas", String.valueOf(facts.getReadyReplicas()));
+            vars.put("replicaSetCount", String.valueOf(facts.getReplicaSetCount()));
+            vars.put("phase", nvl(facts.getPhase()));
+            vars.put("waitingReason", nvl(facts.getWaitingReason()));
+            vars.put("terminatedReason", nvl(facts.getTerminatedReason()));
+            vars.put("restartCount", String.valueOf(facts.getRestartCount()));
+            vars.put("crashLoop", String.valueOf(facts.isCrashLoop()));
+            vars.put("imagePullFailure", String.valueOf(facts.isImagePullFailure()));
+            vars.put("replicasIntentionallyZero", String.valueOf(facts.isReplicasIntentionallyZero()));
+            vars.put("conclusion", facts.getConclusion() != null ? facts.getConclusion().name() : "UNKNOWN");
+            vars.put("warningEvents", String.valueOf(facts.getWarningEvents()));
+            vars.put("logsSnippet", LlmContextLimiter.tail(facts.getLogsSnippet(), 1200));
+            String prompt = prompts.render(PromptKeys.SRE_INVESTIGATE, vars);
+            return llmPort.complete(new LlmPort.LlmRequest(
+                            prompt, llmProperties.getTimeoutSeconds(), snap.key(), snap.version(), null))
+                    .map(raw -> {
+                        LlmInvestigationResult parsed = parse(raw, heuristic);
+                        parsed.setHeuristicFallback(false);
+                        return parsed;
+                    })
+                    .orElseGet(() -> {
+                        heuristic.setHeuristicFallback(true);
+                        return heuristic;
+                    });
         } catch (Exception e) {
             log.warn("LLM de investigação falhou, usando heurística: {}", e.getMessage());
             heuristic.setHeuristicFallback(true);
@@ -63,9 +86,8 @@ public class LlmInvestigationService {
         if (facts.getConclusion() != null) {
             switch (facts.getConclusion()) {
                 case NODE_FAILURE, TRANSIENT_INFRA_RECOVERABLE -> recommended.add("RECREATE_POD");
-                case CONTROLLER_ALREADY_RETRYING -> recommended.add("DISMISS");
-                case REPLICAS_INTENTIONALLY_ZERO -> recommended.add("DISMISS");
-                case IMAGE_OR_CONFIG, UNSCHEDULABLE, NO_CONTROLLER -> recommended.add("DISMISS");
+                case CONTROLLER_ALREADY_RETRYING, REPLICAS_INTENTIONALLY_ZERO, IMAGE_OR_CONFIG, UNSCHEDULABLE,
+                        NO_CONTROLLER -> recommended.add("DISMISS");
             }
         }
         if (facts.getDesiredReplicas() != null && facts.getDesiredReplicas() > 0
@@ -80,35 +102,6 @@ public class LlmInvestigationService {
                 .recommendedActionIds(recommended)
                 .heuristicFallback(true)
                 .build();
-    }
-
-    private String buildPrompt(ClusterFacts facts, String errorReason) {
-        return """
-                Você é um SRE. Analise SOMENTE os fatos Kubernetes abaixo.
-                Não invente comandos. recommendedActionIds deve ser subconjunto de:
-                RECREATE_POD, ROLLOUT_RESTART, ROLLBACK_REVISION, SCALE_REPLAY, DISMISS.
-
-                errorReason: %s
-                fatos:
-                namespace=%s service=%s pod=%s deployment=%s
-                desired=%s available=%s ready=%s replicaSets=%s
-                phase=%s waiting=%s terminated=%s restarts=%s
-                crashLoop=%s imagePull=%s replicasZero=%s conclusion=%s
-                events: %s
-                logs (truncados): %s
-
-                Responda APENAS JSON:
-                {"rootCause":"...","summary":"...","recommendedActionIds":["DISMISS"],"riskNotes":"..."}
-                """.formatted(
-                errorReason,
-                facts.getNamespace(), facts.getServiceName(), facts.getPodName(), facts.getDeploymentName(),
-                facts.getDesiredReplicas(), facts.getAvailableReplicas(), facts.getReadyReplicas(),
-                facts.getReplicaSetCount(),
-                facts.getPhase(), facts.getWaitingReason(), facts.getTerminatedReason(), facts.getRestartCount(),
-                facts.isCrashLoop(), facts.isImagePullFailure(), facts.isReplicasIntentionallyZero(),
-                facts.getConclusion(),
-                facts.getWarningEvents(),
-                LlmContextLimiter.tail(facts.getLogsSnippet(), 1200));
     }
 
     private LlmInvestigationResult parse(String raw, LlmInvestigationResult fallback) {
@@ -143,5 +136,9 @@ public class LlmInvestigationService {
             return raw.substring(start, end + 1);
         }
         return raw;
+    }
+
+    private static String nvl(String value) {
+        return value == null ? "" : value;
     }
 }

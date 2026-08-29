@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>{{styles}}</style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>⏳ DeployerAgent Assumiu o Deploy</h1>
+      <p>Iniciando esteira de rollout no Kubernetes</p>
+    </div>
+    <div class="content">
+      <p>Olá {{approverDisplayName}},</p>
+      <p>O Merge do PR #{{prNumber}} foi aprovado e efetuado por <strong>@{{mergedBy}}</strong>.</p>
+      <p>O <strong>DeployerAgent</strong> foi disparado e está aplicando o rollout restart no cluster Kubernetes no namespace <code>{{namespace}}</code>.</p>
+      <p>Serviço Alvo: <strong>{{repoName}}</strong></p>
+      <p>Você receberá um novo e-mail assim que o pod estiver 100% online e saudável.</p>
+    </div>
+    <div class="footer">KeepGuard Multi-Agent Autonomous Pipeline • Deploy em Andamento</div>
+  </div>
+</body>
+</html>

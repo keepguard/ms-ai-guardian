@@ -2,6 +2,8 @@ package com.keepguard.ms_ai_guardian.adapters.out.github;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keepguard.ms_ai_guardian.application.port.out.cache.RateLimiterPort;
+import com.keepguard.ms_ai_guardian.application.port.out.github.GitHubPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,10 +17,10 @@ import java.util.*;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class GitHubApiClient {
+public class GitHubApiClient implements GitHubPort {
 
     private final ObjectMapper objectMapper;
-    private final com.keepguard.ms_ai_guardian.infrastructure.ratelimit.RateLimiterService rateLimiterService;
+    private final RateLimiterPort rateLimiterService;
     private final RestClient restClient = RestClient.builder()
             .baseUrl("https://api.github.com")
             .build();

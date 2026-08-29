@@ -3,7 +3,7 @@ package com.keepguard.ms_ai_guardian.adapters.in.messaging;
 import com.keepguard.ms_ai_guardian.application.service.AiDiagnosticService;
 import com.keepguard.ms_ai_guardian.infrastructure.messaging.RabbitMqTopologyConfig;
 import com.keepguard.ms_ai_guardian.infrastructure.messaging.dto.IncidentQueueMessage;
-import com.keepguard.ms_ai_guardian.infrastructure.ratelimit.RateLimiterService;
+import com.keepguard.ms_ai_guardian.application.port.out.cache.RateLimiterPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 public class IncidentQueueConsumer {
 
     private final AiDiagnosticService aiDiagnosticService;
-    private final RateLimiterService rateLimiterService;
+    private final RateLimiterPort rateLimiterService;
 
     @RabbitListener(queues = RabbitMqTopologyConfig.GUARDIAN_INCIDENT_QUEUE)
     public void consumeIncident(IncidentQueueMessage message) {

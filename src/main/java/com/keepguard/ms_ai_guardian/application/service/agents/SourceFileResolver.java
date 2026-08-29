@@ -1,6 +1,6 @@
 package com.keepguard.ms_ai_guardian.application.service.agents;
 
-import com.keepguard.ms_ai_guardian.adapters.out.github.GitHubApiClient;
+import com.keepguard.ms_ai_guardian.application.port.out.github.GitHubPort;
 import com.keepguard.ms_ai_guardian.infrastructure.util.IncidentSourceLocator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +16,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SourceFileResolver {
 
-    private final GitHubApiClient gitHubClient;
+    private final GitHubPort gitHubClient;
 
     public record ResolvedFile(String path, String content, String sha, Integer lineNumber) {}
 

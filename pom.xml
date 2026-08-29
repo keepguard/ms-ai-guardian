@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.keepguard</groupId>
 	<artifactId>ms-ai-guardian</artifactId>
-	<version>1.0.35</version>
+	<version>1.0.36</version>
 	<name>ms-ai-guardian</name>
 	<description>KeepGuard AI Guardian - Intelligent Kubernetes Diagnostics and Incident Reasoning Agent</description>
 
@@ -93,7 +93,17 @@
 			<version>2.3.0</version>
 		</dependency>
 
-		<!-- Bucket4j Token Bucket Rate Limiter -->
+		<!-- Redis: lock distribuído, rate-limit compartilhado, cache de prompts -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-pool2</artifactId>
+		</dependency>
+
+		<!-- Bucket4j Token Bucket Rate Limiter (fallback local) -->
 		<dependency>
 			<groupId>com.bucket4j</groupId>
 			<artifactId>bucket4j-core</artifactId>

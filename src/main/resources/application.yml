@@ -25,6 +25,17 @@ spring:
       hibernate:
         format_sql: false
         default_schema: ms_ai_guardian
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:${REDIS_HOST:localhost}}
+      port: ${SPRING_DATA_REDIS_PORT:${REDIS_PORT:6379}}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+          max-wait: 2000ms
   rabbitmq:
     host: localhost
     port: 5672
@@ -79,8 +90,20 @@ app:
     healthy-streak-required: 3
     max-alert-recipients: 20
     console-url: ${APP_GUARDIAN_CONSOLE_URL:https://app.keepguard.com.br}
-    default-recipient: rafael.nogueira2009@gmail.com
-    tenant-id: f7fc7350-b9fc-4e54-9c58-ac9385b23ae3
+    default-recipient: ${APP_GUARDIAN_DEFAULT_RECIPIENT:}
+    tenant-id: ${APP_GUARDIAN_TENANT_ID:}
+    approver-github: ${APP_GUARDIAN_APPROVER_GITHUB:human}
+    approver-display-name: ${APP_GUARDIAN_APPROVER_DISPLAY_NAME:time}
+    redis:
+      key-prefix: guardian
+      lock-ttl-seconds: 600
+      idempotency-ttl-seconds: 86400
+      prompt-cache-ttl-seconds: 300
+      llm-cache-ttl-seconds: 3600
+    rate-limit:
+      github-per-second: 10
+      llm-per-second: 5
+      email-per-second: 20
     llm:
       # ollama (cluster) | openai | anthropic | none (só heurística, ChatClient ausente)
       provider: ${APP_GUARDIAN_LLM_PROVIDER:ollama}
@@ -111,6 +134,8 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+    redis:
+      enabled: false
   endpoints:
     web:
       exposure:

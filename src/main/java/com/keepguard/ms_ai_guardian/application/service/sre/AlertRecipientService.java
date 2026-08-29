@@ -2,8 +2,8 @@ package com.keepguard.ms_ai_guardian.application.service.sre;
 
 import com.keepguard.ms_ai_guardian.domain.entity.GuardianAlertRecipient;
 import com.keepguard.ms_ai_guardian.domain.repository.GuardianAlertRecipientRepository;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,12 +18,7 @@ public class AlertRecipientService {
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final GuardianAlertRecipientRepository repository;
-
-    @Value("${app.guardian.default-recipient:rafael.nogueira2009@gmail.com}")
-    private String defaultRecipient;
-
-    @Value("${app.guardian.max-alert-recipients:20}")
-    private int maxActive;
+    private final GuardianProperties properties;
 
     @Transactional
     public List<GuardianAlertRecipient> listEnabledOrSeed() {
@@ -31,17 +26,17 @@ public class AlertRecipientService {
         if (!enabled.isEmpty()) {
             return enabled;
         }
-        if (repository.count() == 0 && defaultRecipient != null && !defaultRecipient.isBlank()) {
+        if (repository.count() == 0 && hasDefault()) {
             repository.save(GuardianAlertRecipient.builder()
-                    .email(normalize(defaultRecipient))
+                    .email(normalize(properties.getDefaultRecipient()))
                     .enabled(true)
                     .label("default")
                     .build());
             return repository.findByEnabledTrueOrderByCreatedAtAsc();
         }
-        if (defaultRecipient != null && !defaultRecipient.isBlank()) {
+        if (hasDefault()) {
             return List.of(GuardianAlertRecipient.builder()
-                    .email(normalize(defaultRecipient))
+                    .email(normalize(properties.getDefaultRecipient()))
                     .enabled(true)
                     .label("fallback")
                     .build());
@@ -69,7 +64,7 @@ public class AlertRecipientService {
             }
             return repository.save(rec);
         }
-        if (enabled && repository.countByEnabledTrue() >= maxActive) {
+        if (enabled && repository.countByEnabledTrue() >= properties.getMaxAlertRecipients()) {
             throw new IllegalArgumentException("Limite de destinatários ativos atingido");
         }
         return repository.save(GuardianAlertRecipient.builder()
@@ -83,11 +78,15 @@ public class AlertRecipientService {
     public GuardianAlertRecipient setEnabled(java.util.UUID id, boolean enabled) {
         GuardianAlertRecipient rec = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Destinatário não encontrado"));
-        if (enabled && !rec.isEnabled() && repository.countByEnabledTrue() >= maxActive) {
+        if (enabled && !rec.isEnabled() && repository.countByEnabledTrue() >= properties.getMaxAlertRecipients()) {
             throw new IllegalArgumentException("Limite de destinatários ativos atingido");
         }
         rec.setEnabled(enabled);
         return repository.save(rec);
+    }
+
+    private boolean hasDefault() {
+        return properties.getDefaultRecipient() != null && !properties.getDefaultRecipient().isBlank();
     }
 
     private static String normalize(String email) {

@@ -22,7 +22,12 @@ env:
   postgresUser: "keepguard_api_user"
   rabbitmqHost: "rabbitmq-service"
   rabbitmqPort: "5672"
-  defaultRecipient: "rafael.nogueira2009@gmail.com"
+  redisHost: "redis"
+  redisPort: "6379"
+  defaultRecipient: ""
+  tenantId: ""
+  approverGithub: "human"
+  approverDisplayName: "time"
   namespace: "keepguard"
   watcherEnabled: true
   # Heap relativo ao cgroup (70% de 1Gi ≈ 700Mi). Nunca use -Xmx igual ao limit do pod.
