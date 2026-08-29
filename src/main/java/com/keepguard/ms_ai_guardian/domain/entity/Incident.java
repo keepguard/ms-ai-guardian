@@ -1,7 +1,9 @@
 package com.keepguard.ms_ai_guardian.domain.entity;
 
+import com.keepguard.ms_ai_guardian.domain.enums.ClosedBy;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentSeverity;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentStatus;
+import com.keepguard.ms_ai_guardian.domain.enums.InvestigationSource;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -35,7 +37,7 @@ public class Incident {
     private String serviceName;
 
     @Column(nullable = false)
-    private String errorReason; // e.g. CrashLoopBackOff, OOMKilled, Error, HighErrorRate
+    private String errorReason;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -68,6 +70,33 @@ public class Incident {
     private boolean notificationSent;
 
     private LocalDateTime notificationSentAt;
+
+    @Column(name = "k8s_conclusion", length = 64)
+    private String k8sConclusion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "investigation_source", length = 32)
+    private InvestigationSource investigationSource;
+
+    @Column(name = "correlation_id", length = 64)
+    private String correlationId;
+
+    @Builder.Default
+    @Column(name = "healthy_streak", nullable = false)
+    private int healthyStreak = 0;
+
+    @Column(name = "normalized_at")
+    private LocalDateTime normalizedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "closed_by", length = 16)
+    private ClosedBy closedBy;
+
+    @Column(name = "reopened_from_id")
+    private UUID reopenedFromId;
+
+    @Column(name = "ai_summary", columnDefinition = "TEXT")
+    private String aiSummary;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

@@ -76,6 +76,9 @@ app:
     watcher-enabled: true
     scan-interval-ms: 60000
     anti-flapping-cooldown-minutes: 15
+    healthy-streak-required: 3
+    max-alert-recipients: 20
+    console-url: ${APP_GUARDIAN_CONSOLE_URL:https://app.keepguard.com.br}
     default-recipient: rafael.nogueira2009@gmail.com
     tenant-id: f7fc7350-b9fc-4e54-9c58-ac9385b23ae3
     llm:

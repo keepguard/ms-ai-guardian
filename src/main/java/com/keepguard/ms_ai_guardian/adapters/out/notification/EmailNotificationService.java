@@ -528,6 +528,24 @@ public class EmailNotificationService {
         return sendGenericEmail(subject, html, serviceName);
     }
 
+    public boolean sendHtmlTo(String recipient, String subject, String htmlBody, String serviceName, String logContext,
+            UUID stableCorrelationId, boolean publishAudit) {
+        String correlationId = stableCorrelationId != null
+                ? stableCorrelationId.toString()
+                : UUID.nameUUIDFromBytes((serviceName + "|" + logContext + "|" + subject + "|" + recipient)
+                        .getBytes(StandardCharsets.UTF_8)).toString();
+        boolean published = publishToGoogleSender(recipient, subject, htmlBody, logContext, correlationId);
+        if (publishAudit) {
+            auditPublisher.publish(
+                    published ? "GUARDIAN_ALERT_SENT" : "GUARDIAN_ALERT_FAILED",
+                    published ? "SUCCESS" : "FAILURE",
+                    correlationId,
+                    "INCIDENT",
+                    serviceName);
+        }
+        return published;
+    }
+
     private boolean sendGenericEmail(String subject, String htmlBody, String serviceName) {
         return dispatchEmail(subject, htmlBody, serviceName, "INFO", serviceName, null);
     }
@@ -588,18 +606,24 @@ public class EmailNotificationService {
     }
 
     private boolean publishToGoogleSender(String subject, String htmlBody, String logContext, String correlationId) {
+        return publishToGoogleSender(defaultRecipient, subject, htmlBody, logContext, correlationId);
+    }
+
+    private boolean publishToGoogleSender(String recipient, String subject, String htmlBody, String logContext,
+            String correlationId) {
         try {
+            String to = recipient == null || recipient.isBlank() ? defaultRecipient : recipient;
             Map<String, Object> payload = new HashMap<>();
             payload.put("tenant_id", defaultTenantId);
             payload.put("x_correlation_id", correlationId);
             payload.put("correlationId", correlationId);
-            payload.put("to", defaultRecipient);
+            payload.put("to", to);
             payload.put("subject", subject);
             payload.put("html", htmlBody);
 
             log.info("Publicando e-mail via RabbitMQ ({}/{}) | contexto: {}", emailExchange, emailRoutingKey, logContext);
             rabbitTemplate.convertAndSend(emailExchange, emailRoutingKey, payload);
-            log.info("✅ E-mail publicado na fila do srv-email-google-sender para {}", defaultRecipient);
+            log.info("✅ E-mail publicado na fila do srv-email-google-sender para {}", to);
             return true;
         } catch (Exception e) {
             log.error("Falha ao publicar e-mail no RabbitMQ: {}", e.getMessage(), e);

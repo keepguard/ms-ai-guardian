@@ -1,7 +1,11 @@
 package com.keepguard.ms_ai_guardian.adapters.out.k8s;
 
+import com.keepguard.ms_ai_guardian.application.dto.ClusterFacts;
+import com.keepguard.ms_ai_guardian.domain.enums.K8sConclusion;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.ReplicaSet;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -179,5 +183,201 @@ public class KubernetesInspectorService {
         } catch (Exception e) {
             return "Erro ao inspecionar pod: " + e.getMessage();
         }
+    }
+
+    public ClusterFacts collectFacts(String namespace, String podName, String serviceName) {
+        Deployment deployment = findDeployment(namespace, serviceName);
+        String deploymentName = deployment != null ? deployment.getMetadata().getName() : serviceName;
+        Integer desired = 1;
+        Integer available = 0;
+        Integer ready = 0;
+        boolean replicasZero = false;
+        int replicaSetCount = 0;
+        if (deployment != null) {
+            desired = deployment.getSpec() != null && deployment.getSpec().getReplicas() != null
+                    ? deployment.getSpec().getReplicas() : 1;
+            available = deployment.getStatus() != null && deployment.getStatus().getAvailableReplicas() != null
+                    ? deployment.getStatus().getAvailableReplicas() : 0;
+            ready = deployment.getStatus() != null && deployment.getStatus().getReadyReplicas() != null
+                    ? deployment.getStatus().getReadyReplicas() : 0;
+            replicasZero = desired == 0;
+            replicaSetCount = countReplicaSets(namespace, deploymentName);
+        }
+
+        Pod pod = resolvePod(namespace, podName, serviceName);
+        String resolvedPodName = pod != null && pod.getMetadata() != null ? pod.getMetadata().getName() : podName;
+        String phase = pod != null && pod.getStatus() != null ? pod.getStatus().getPhase() : null;
+        String waiting = null;
+        String terminated = null;
+        Integer restartCount = 0;
+        Integer exitCode = null;
+        boolean crashLoop = false;
+        boolean imagePull = false;
+        if (pod != null && pod.getStatus() != null && pod.getStatus().getContainerStatuses() != null) {
+            for (ContainerStatus cs : pod.getStatus().getContainerStatuses()) {
+                if (cs.getRestartCount() != null) {
+                    restartCount = Math.max(restartCount, cs.getRestartCount());
+                }
+                if (cs.getState() != null && cs.getState().getWaiting() != null) {
+                    waiting = cs.getState().getWaiting().getReason();
+                    if ("CrashLoopBackOff".equalsIgnoreCase(waiting)) {
+                        crashLoop = true;
+                    }
+                    if ("ImagePullBackOff".equalsIgnoreCase(waiting) || "ErrImagePull".equalsIgnoreCase(waiting)
+                            || "CreateContainerConfigError".equalsIgnoreCase(waiting)) {
+                        imagePull = true;
+                    }
+                }
+                if (cs.getLastState() != null && cs.getLastState().getTerminated() != null) {
+                    terminated = cs.getLastState().getTerminated().getReason();
+                    exitCode = cs.getLastState().getTerminated().getExitCode();
+                    if ("OOMKilled".equalsIgnoreCase(terminated)) {
+                        crashLoop = true;
+                    }
+                }
+            }
+        }
+
+        List<String> events = getRecentWarningEvents(namespace, resolvedPodName);
+        String describe = resolvedPodName != null ? describePodHealth(namespace, resolvedPodName) : "Pod não encontrado";
+        String logs = resolvedPodName != null ? getPodLogs(namespace, resolvedPodName, 80) : "";
+
+        K8sConclusion conclusion = classify(deployment == null, replicasZero, crashLoop, imagePull, phase, waiting,
+                events, desired, available);
+        boolean hasUnhealthy = listUnhealthyPodsForService(namespace, serviceName);
+        boolean healthy = desired != null && desired > 0
+                && available != null && available > 0
+                && !crashLoop
+                && !imagePull
+                && !hasUnhealthy;
+
+        return ClusterFacts.builder()
+                .namespace(namespace)
+                .serviceName(serviceName)
+                .podName(resolvedPodName)
+                .deploymentName(deploymentName)
+                .desiredReplicas(desired)
+                .availableReplicas(available)
+                .readyReplicas(ready)
+                .replicaSetCount(replicaSetCount)
+                .phase(phase)
+                .waitingReason(waiting)
+                .terminatedReason(terminated)
+                .restartCount(restartCount)
+                .exitCode(exitCode)
+                .replicasIntentionallyZero(replicasZero)
+                .crashLoop(crashLoop)
+                .imagePullFailure(imagePull)
+                .warningEvents(events)
+                .logsSnippet(logs)
+                .describe(describe)
+                .conclusion(conclusion)
+                .healthy(healthy)
+                .build();
+    }
+
+    public boolean isServiceHealthy(String namespace, String serviceName) {
+        try {
+            return collectFacts(namespace, null, serviceName).isHealthy();
+        } catch (Exception e) {
+            log.warn("Falha ao avaliar saúde de {}/{}: {}", namespace, serviceName, e.getMessage());
+            return false;
+        }
+    }
+
+    public void deletePod(String namespace, String podName) {
+        k8sClient.pods().inNamespace(namespace).withName(podName).delete();
+    }
+
+    public void rolloutRestart(String namespace, String deploymentName) {
+        k8sClient.apps().deployments().inNamespace(namespace).withName(deploymentName).rolling().restart();
+    }
+
+    public void rollbackRevision(String namespace, String deploymentName) {
+        k8sClient.apps().deployments().inNamespace(namespace).withName(deploymentName).rolling().undo();
+    }
+
+    public void scaleDeployment(String namespace, String deploymentName, int replicas) {
+        k8sClient.apps().deployments().inNamespace(namespace).withName(deploymentName).scale(replicas);
+    }
+
+    private boolean listUnhealthyPodsForService(String namespace, String serviceName) {
+        try {
+            return k8sClient.pods().inNamespace(namespace).withLabel("app", serviceName).list().getItems().stream()
+                    .anyMatch(this::isPodUnhealthy);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Deployment findDeployment(String namespace, String serviceName) {
+        try {
+            Deployment byName = k8sClient.apps().deployments().inNamespace(namespace).withName(serviceName).get();
+            if (byName != null) {
+                return byName;
+            }
+            List<Deployment> labeled = k8sClient.apps().deployments().inNamespace(namespace)
+                    .withLabel("app", serviceName).list().getItems();
+            return labeled.isEmpty() ? null : labeled.get(0);
+        } catch (Exception e) {
+            log.warn("Deployment {}/{} não encontrado: {}", namespace, serviceName, e.getMessage());
+            return null;
+        }
+    }
+
+    private int countReplicaSets(String namespace, String deploymentName) {
+        try {
+            List<ReplicaSet> items = k8sClient.apps().replicaSets().inNamespace(namespace).list().getItems();
+            return (int) items.stream()
+                    .filter(rs -> rs.getMetadata() != null && rs.getMetadata().getOwnerReferences() != null)
+                    .filter(rs -> rs.getMetadata().getOwnerReferences().stream()
+                            .anyMatch(ow -> deploymentName.equals(ow.getName())))
+                    .count();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private Pod resolvePod(String namespace, String podName, String serviceName) {
+        try {
+            if (podName != null && !podName.isBlank() && !podName.endsWith("-deployment")) {
+                Pod exact = k8sClient.pods().inNamespace(namespace).withName(podName).get();
+                if (exact != null) {
+                    return exact;
+                }
+            }
+            List<Pod> labeled = k8sClient.pods().inNamespace(namespace).withLabel("app", serviceName).list().getItems();
+            return labeled.isEmpty() ? null : labeled.get(0);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private K8sConclusion classify(boolean noController, boolean replicasZero, boolean crashLoop, boolean imagePull,
+            String phase, String waiting, List<String> events, Integer desired, Integer available) {
+        String eventBlob = events == null ? "" : String.join(" ", events);
+        if (noController) {
+            return K8sConclusion.NO_CONTROLLER;
+        }
+        if (replicasZero) {
+            return K8sConclusion.REPLICAS_INTENTIONALLY_ZERO;
+        }
+        if (imagePull || "ImagePullBackOff".equalsIgnoreCase(waiting) || "ErrImagePull".equalsIgnoreCase(waiting)
+                || "CreateContainerConfigError".equalsIgnoreCase(waiting)) {
+            return K8sConclusion.IMAGE_OR_CONFIG;
+        }
+        if ("Pending".equalsIgnoreCase(phase) || eventBlob.contains("FailedScheduling")) {
+            return K8sConclusion.UNSCHEDULABLE;
+        }
+        if ("Unknown".equalsIgnoreCase(phase) || eventBlob.contains("Evicted") || eventBlob.contains("NodeNotReady")) {
+            return K8sConclusion.NODE_FAILURE;
+        }
+        if (crashLoop || "CrashLoopBackOff".equalsIgnoreCase(waiting)) {
+            return K8sConclusion.CONTROLLER_ALREADY_RETRYING;
+        }
+        if (desired != null && desired > 0 && (available == null || available == 0)) {
+            return K8sConclusion.TRANSIENT_INFRA_RECOVERABLE;
+        }
+        return K8sConclusion.CONTROLLER_ALREADY_RETRYING;
     }
 }

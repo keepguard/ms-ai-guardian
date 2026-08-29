@@ -17,5 +17,9 @@ public enum IncidentStatus {
     DIAGNOSING,
     DIAGNOSED,
     NOTIFIED,
+    AWAITING_HUMAN,
+    ACTION_RUNNING,
+    NORMALIZED,
+    DISMISSED,
     IGNORED
 }

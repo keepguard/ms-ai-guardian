@@ -1,17 +1,26 @@
 package com.keepguard.ms_ai_guardian.adapters.in.rest;
 
+import com.keepguard.ms_ai_guardian.application.dto.AlertRecipientUpsertRequest;
 import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
+import com.keepguard.ms_ai_guardian.application.dto.ExecuteActionRequest;
+import com.keepguard.ms_ai_guardian.application.dto.IncidentDetailDTO;
 import com.keepguard.ms_ai_guardian.application.dto.ManualDiagnoseRequestDTO;
+import com.keepguard.ms_ai_guardian.application.dto.PaginatedIncidentResponse;
 import com.keepguard.ms_ai_guardian.application.service.AiDiagnosticService;
-import com.keepguard.ms_ai_guardian.domain.entity.Incident;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
+import com.keepguard.ms_ai_guardian.application.service.sre.AlertRecipientService;
+import com.keepguard.ms_ai_guardian.application.service.sre.IncidentQueryService;
+import com.keepguard.ms_ai_guardian.application.service.sre.IncidentRemediationService;
+import com.keepguard.ms_ai_guardian.domain.entity.GuardianAlertRecipient;
+import com.keepguard.ms_ai_guardian.domain.entity.IncidentActionExecution;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -20,9 +29,15 @@ import java.util.UUID;
 @Tag(name = "AI Guardian Diagnostics", description = "Endpoints do Agente de Inteligência Artificial para Diagnóstico de Incidentes")
 public class GuardianDiagnosticController {
 
-    private final AiDiagnosticService aiDiagnosticService;
-    private final IncidentRepository incidentRepository;
+    private static final List<String> LIST_QUERY_KEYS = List.of(
+            "page", "size", "from", "to", "status", "severity", "serviceName", "namespace",
+            "k8sConclusion", "errorReason", "correlationId", "q", "sort", "dir"
+    );
 
+    private final AiDiagnosticService aiDiagnosticService;
+    private final IncidentQueryService incidentQueryService;
+    private final IncidentRemediationService incidentRemediationService;
+    private final AlertRecipientService alertRecipientService;
     private final org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
 
     @PostMapping("/diagnose/async")
@@ -70,16 +85,62 @@ public class GuardianDiagnosticController {
     }
 
     @GetMapping("/incidents")
-    @Operation(summary = "Listar histórico de incidentes e diagnósticos armazenados no banco de dados")
-    public ResponseEntity<List<Incident>> listIncidents(@RequestParam(defaultValue = "keepguard") String namespace) {
-        return ResponseEntity.ok(incidentRepository.findByNamespaceOrderByCreatedAtDesc(namespace));
+    @Operation(summary = "Listar incidentes com paginação e filtros")
+    public ResponseEntity<PaginatedIncidentResponse> listIncidents(
+            @RequestParam(required = false) Map<String, String> params) {
+        Map<String, String> query = new LinkedHashMap<>();
+        if (params != null) {
+            for (String key : LIST_QUERY_KEYS) {
+                if (params.containsKey(key) && params.get(key) != null && !params.get(key).isBlank()) {
+                    query.put(key, params.get(key));
+                }
+            }
+        }
+        query.putIfAbsent("namespace", "keepguard");
+        return ResponseEntity.ok(incidentQueryService.list(query));
     }
 
     @GetMapping("/incidents/{id}")
     @Operation(summary = "Obter detalhes de um incidente específico por ID")
-    public ResponseEntity<Incident> getIncidentById(@PathVariable UUID id) {
-        return incidentRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<IncidentDetailDTO> getIncidentById(@PathVariable UUID id) {
+        return ResponseEntity.ok(incidentQueryService.get(id));
+    }
+
+    @PostMapping("/incidents/{id}/actions")
+    @Operation(summary = "Executar ação catalogada no incidente")
+    public ResponseEntity<IncidentActionExecution> executeAction(
+            @PathVariable UUID id,
+            @RequestBody ExecuteActionRequest request,
+            @RequestHeader(value = "X-User-ID", required = false) String userId,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        return ResponseEntity.ok(incidentRemediationService.execute(
+                id,
+                request.getSuggestionId(),
+                request.getConfirmation(),
+                userId,
+                userEmail,
+                userRole,
+                correlationId));
+    }
+
+    @GetMapping("/alert-recipients")
+    public ResponseEntity<List<GuardianAlertRecipient>> listRecipients() {
+        return ResponseEntity.ok(alertRecipientService.listAll());
+    }
+
+    @PutMapping("/alert-recipients")
+    public ResponseEntity<GuardianAlertRecipient> upsertRecipient(@RequestBody AlertRecipientUpsertRequest request) {
+        boolean enabled = request.getEnabled() == null || request.getEnabled();
+        return ResponseEntity.ok(alertRecipientService.upsert(request.getEmail(), request.getLabel(), enabled));
+    }
+
+    @PatchMapping("/alert-recipients/{id}")
+    public ResponseEntity<GuardianAlertRecipient> patchRecipient(
+            @PathVariable UUID id,
+            @RequestBody AlertRecipientUpsertRequest request) {
+        boolean enabled = request.getEnabled() == null || request.getEnabled();
+        return ResponseEntity.ok(alertRecipientService.setEnabled(id, enabled));
     }
 }

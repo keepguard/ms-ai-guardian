@@ -2,6 +2,7 @@ package com.keepguard.ms_ai_guardian.adapters.in.scheduler;
 
 import com.keepguard.ms_ai_guardian.adapters.out.k8s.KubernetesInspectorService;
 import com.keepguard.ms_ai_guardian.application.service.AiDiagnosticService;
+import com.keepguard.ms_ai_guardian.application.service.sre.IncidentReconciliationService;
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ public class KubernetesHealthWatcherScheduler {
 
     private final KubernetesInspectorService k8sInspector;
     private final AiDiagnosticService aiDiagnosticService;
+    private final IncidentReconciliationService incidentReconciliationService;
     private final com.keepguard.ms_ai_guardian.application.service.agents.CoderAgentService coderAgentService;
     private final com.keepguard.ms_ai_guardian.application.service.agents.ReviewerAgentService reviewerAgentService;
     private final com.keepguard.ms_ai_guardian.application.service.agents.DeployerAgentService deployerAgentService;
@@ -138,8 +140,10 @@ public class KubernetesHealthWatcherScheduler {
             }
 
             if (unhealthyPods.isEmpty() && zeroDeployments.isEmpty()) {
-                log.debug("🛡️ [AI Guardian] Cluster {} saudável. Nenhum pod em estado anômalo.", targetNamespace);
+                log.debug("AI Guardian cluster {} sem anomalias novas.", targetNamespace);
             }
+
+            incidentReconciliationService.reconcileOpenIncidents();
 
         } catch (Exception e) {
             log.error("Erro durante a varredura do cluster pelo AI Guardian: {}", e.getMessage(), e);

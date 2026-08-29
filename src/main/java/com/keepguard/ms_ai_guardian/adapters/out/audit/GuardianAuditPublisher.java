@@ -32,6 +32,11 @@ public class GuardianAuditPublisher {
     private String routingKey;
 
     public void publish(String action, String outcome, String correlationId, String resourceType, String resourceId) {
+        publish(action, outcome, correlationId, resourceType, resourceId, "SYSTEM", null);
+    }
+
+    public void publish(String action, String outcome, String correlationId, String resourceType, String resourceId,
+            String actorType, String actorCodeUser) {
         if (!enabled) {
             return;
         }
@@ -46,7 +51,12 @@ public class GuardianAuditPublisher {
         event.put("correlationId", cid);
         event.put("action", action);
         event.put("outcome", outcome);
-        event.put("actor", Map.of("type", "SYSTEM"));
+        Map<String, Object> actor = new HashMap<>();
+        actor.put("type", actorType == null || actorType.isBlank() ? "SYSTEM" : actorType);
+        if (actorCodeUser != null && !actorCodeUser.isBlank()) {
+            actor.put("codeUser", actorCodeUser);
+        }
+        event.put("actor", actor);
         event.put("resource", Map.of("type", resourceType, "id", resourceId == null ? "" : resourceId));
         CompletableFuture.runAsync(() -> {
             try {
