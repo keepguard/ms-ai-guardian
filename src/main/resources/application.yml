@@ -91,6 +91,13 @@ app:
     email-exchange: srv-email-google-sender-exchange-dev
     email-routing-key: email.google.send
 
+keepguard:
+  audit:
+    enabled: true
+    exchange: srv-audit-exchange-dev
+    routing-key: audit.event
+    source-service: ms-ai-guardian
+
 management:
   endpoint:
     health:

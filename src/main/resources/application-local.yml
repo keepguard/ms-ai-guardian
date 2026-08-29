@@ -16,3 +16,7 @@ spring:
       base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://ollama:11434}
       init:
         pull-model-strategy: never
+
+keepguard:
+  audit:
+    exchange: srv-audit-exchange-local

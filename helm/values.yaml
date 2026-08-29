@@ -21,7 +21,7 @@ env:
   postgresDb: "keepguard_api_db"
   postgresUser: "keepguard_api_user"
   rabbitmqHost: "rabbitmq-service"
-  rabbitmqPort: 5672
+  rabbitmqPort: "5672"
   defaultRecipient: "rafael.nogueira2009@gmail.com"
   namespace: "keepguard"
   watcherEnabled: true

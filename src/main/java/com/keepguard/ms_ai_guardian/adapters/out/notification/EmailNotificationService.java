@@ -1,5 +1,6 @@
 package com.keepguard.ms_ai_guardian.adapters.out.notification;
 
+import com.keepguard.ms_ai_guardian.adapters.out.audit.GuardianAuditPublisher;
 import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +8,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -19,6 +21,7 @@ import java.util.UUID;
 public class EmailNotificationService {
 
     private final RabbitTemplate rabbitTemplate;
+    private final GuardianAuditPublisher auditPublisher;
     private final org.springframework.web.client.RestClient restClient = org.springframework.web.client.RestClient.create();
 
     @Value("${app.communication.url:http://ms-communication:8082}")
@@ -40,7 +43,7 @@ public class EmailNotificationService {
         String subject = String.format("🚨 [KeepGuard AI Guardian] Incidente: %s (%s)",
                 result.getServiceName(), result.getSeverity());
         return dispatchEmail(subject, buildHtmlReport(result), result.getServiceName(),
-                result.getSeverity().name(), result.getPodName());
+                result.getSeverity().name(), result.getPodName(), result.getIncidentId());
     }
 
     private String buildHtmlReport(DiagnosticResultDTO result) {
@@ -526,7 +529,7 @@ public class EmailNotificationService {
     }
 
     private boolean sendGenericEmail(String subject, String htmlBody, String serviceName) {
-        return dispatchEmail(subject, htmlBody, serviceName, "INFO", serviceName);
+        return dispatchEmail(subject, htmlBody, serviceName, "INFO", serviceName, null);
     }
 
     /**
@@ -534,9 +537,17 @@ public class EmailNotificationService {
      * O HTTP do ms-communication devolve 200 ao enfileirar, mas o payload
      * camelCase/sem tenant_id é rejeitado pelo consumidor Python — não usar como sucesso.
      */
-    private boolean dispatchEmail(String subject, String htmlBody, String serviceName, String severity, String logContext) {
-        String correlationId = UUID.randomUUID().toString();
+    private boolean dispatchEmail(String subject, String htmlBody, String serviceName, String severity, String logContext, UUID stableCorrelationId) {
+        String correlationId = stableCorrelationId != null
+                ? stableCorrelationId.toString()
+                : UUID.nameUUIDFromBytes((serviceName + "|" + logContext + "|" + subject).getBytes(StandardCharsets.UTF_8)).toString();
         boolean published = publishToGoogleSender(subject, htmlBody, logContext, correlationId);
+        auditPublisher.publish(
+                published ? "GUARDIAN_ALERT_SENT" : "GUARDIAN_ALERT_FAILED",
+                published ? "SUCCESS" : "FAILURE",
+                correlationId,
+                "INCIDENT",
+                serviceName);
         if (published) {
             return true;
         }
