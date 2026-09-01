@@ -3,6 +3,7 @@ package com.keepguard.ms_ai_guardian.adapters.in.scheduler;
 import com.keepguard.ms_ai_guardian.adapters.out.k8s.KubernetesInspectorService;
 import com.keepguard.ms_ai_guardian.application.port.in.HandlePrEventPort;
 import com.keepguard.ms_ai_guardian.application.service.AiDiagnosticService;
+import com.keepguard.ms_ai_guardian.application.service.sre.ClusterStormService;
 import com.keepguard.ms_ai_guardian.application.service.sre.IncidentReconciliationService;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -21,6 +22,7 @@ public class KubernetesHealthWatcherScheduler {
     private final KubernetesInspectorService k8sInspector;
     private final AiDiagnosticService aiDiagnosticService;
     private final IncidentReconciliationService incidentReconciliationService;
+    private final ClusterStormService clusterStormService;
     private final HandlePrEventPort handlePrEvent;
     private final GuardianProperties properties;
 
@@ -40,6 +42,13 @@ public class KubernetesHealthWatcherScheduler {
         }
         String targetNamespace = properties.getNamespace();
         try {
+            if (clusterStormService.handleWatcherScan(targetNamespace)) {
+                log.info("[AI Guardian Watcher] Modo tempestade ativo em {} — diagnósticos individuais suprimidos.",
+                        targetNamespace);
+                incidentReconciliationService.reconcileOpenIncidents();
+                return;
+            }
+
             List<Pod> unhealthyPods = k8sInspector.listUnhealthyPods(targetNamespace);
             log.info("[AI Guardian Watcher] Namespace {}. Pods anômalos: {}", targetNamespace, unhealthyPods.size());
             for (Pod pod : unhealthyPods) {

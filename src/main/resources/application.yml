@@ -89,6 +89,11 @@ app:
     anti-flapping-cooldown-minutes: 15
     healthy-streak-required: 3
     max-alert-recipients: 20
+    storm:
+      deployment-threshold-percent: 40
+      min-affected-deployments: 5
+      infra-alert-confirm-scans: 2
+      state-ttl-seconds: 7200
     console-url: ${APP_GUARDIAN_CONSOLE_URL:https://app-core.keepguard.com.br}
     default-recipient: ${APP_GUARDIAN_DEFAULT_RECIPIENT:}
     tenant-id: ${APP_GUARDIAN_TENANT_ID:}

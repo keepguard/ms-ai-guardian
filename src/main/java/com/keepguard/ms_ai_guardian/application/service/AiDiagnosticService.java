@@ -13,6 +13,7 @@ import com.keepguard.ms_ai_guardian.application.service.sre.IncidentInvestigatio
 import com.keepguard.ms_ai_guardian.application.service.sre.IncidentLifecycleService;
 import com.keepguard.ms_ai_guardian.application.service.sre.LlmInvestigationService;
 import com.keepguard.ms_ai_guardian.domain.entity.Incident;
+import com.keepguard.ms_ai_guardian.domain.enums.K8sConclusion;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentSeverity;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentStatus;
 import com.keepguard.ms_ai_guardian.domain.enums.LifecycleEventType;
@@ -105,6 +106,14 @@ public class AiDiagnosticService {
         var businessVerdict = businessAnalystAgentService.evaluateIncident(resultDTO, recentLogs);
 
         var suggestions = suggestionRepository.findByIncidentIdOrderByCreatedAtAsc(incident.getId());
+        if (shouldDeferInfraAlert(incident, facts, errorReason, forceSendEmail)) {
+            log.info("Incidente {} — alerta de infra deferido ({}/{} varreduras).",
+                    incident.getId(),
+                    incident.getOccurrencesCount(),
+                    guardianProperties.getStorm().getInfraAlertConfirmScans());
+            incidentRepository.save(incident);
+            return resultDTO;
+        }
         boolean mesaSent = alertFanoutService.fanoutOpened(incident, suggestions);
         if (mesaSent) {
             lifecycleService.record(incident, LifecycleEventType.ALERTED, "e-mail mesa SRE");
@@ -192,5 +201,21 @@ public class AiDiagnosticService {
             return IncidentSeverity.HIGH;
         }
         return IncidentSeverity.MEDIUM;
+    }
+
+    private boolean shouldDeferInfraAlert(Incident incident, ClusterFacts facts, String errorReason,
+            boolean forceSendEmail) {
+        if (forceSendEmail || incident.isNotificationSent()) {
+            return false;
+        }
+        if (!"SERVICE_OUTAGE_ZERO_REPLICAS_AVAILABLE".equals(errorReason)) {
+            return false;
+        }
+        K8sConclusion conclusion = facts.getConclusion();
+        if (conclusion != K8sConclusion.NODE_FAILURE
+                && conclusion != K8sConclusion.TRANSIENT_INFRA_RECOVERABLE) {
+            return false;
+        }
+        return incident.getOccurrencesCount() < guardianProperties.getStorm().getInfraAlertConfirmScans();
     }
 }

@@ -1,6 +1,8 @@
 package com.keepguard.ms_ai_guardian.application.service.sre;
 
 import com.keepguard.ms_ai_guardian.adapters.out.notification.EmailNotificationService;
+import com.keepguard.ms_ai_guardian.application.dto.ClusterStormAssessment;
+import com.keepguard.ms_ai_guardian.application.port.out.cache.AlertCooldownPort;
 import com.keepguard.ms_ai_guardian.domain.entity.GuardianAlertRecipient;
 import com.keepguard.ms_ai_guardian.domain.entity.Incident;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentActionSuggestion;
@@ -24,6 +26,7 @@ public class AlertFanoutService {
     private final EmailNotificationService emailNotificationService;
     private final IncidentAlertDeliveryRepository deliveryRepository;
     private final GuardianProperties properties;
+    private final AlertCooldownPort alertCooldownPort;
 
     public boolean fanoutOpened(Incident incident, List<IncidentActionSuggestion> suggestions) {
         String enabled = suggestions.stream()
@@ -70,11 +73,80 @@ public class AlertFanoutService {
         return fanout(incident, "ACTION", subject, html);
     }
 
+    public boolean fanoutStormOpened(Incident incident, ClusterStormAssessment assessment) {
+        String servicesHtml = assessment.unavailableServiceNames().stream()
+                .map(s -> "• " + s)
+                .reduce((a, b) -> a + "<br/>" + b)
+                .orElse("—");
+        String body = "Tempestade de infraestrutura detectada no namespace <strong>" + n(incident.getNamespace())
+                + "</strong>.<br/><br/>"
+                + "<strong>Motivo:</strong> " + assessment.stormReason() + "<br/>"
+                + "<strong>Deployments indisponíveis:</strong> " + assessment.unavailableDeployments()
+                + " / " + assessment.totalDeployments()
+                + " (" + assessment.unavailablePercent() + "%)<br/><br/>"
+                + "<strong>Serviços afetados:</strong><br/>" + servicesHtml;
+        String html = mesaHtml(
+                "Tempestade no cluster: múltiplos serviços indisponíveis",
+                incident,
+                body,
+                "Os alertas individuais foram suprimidos para evitar spam. Acompanhe a mesa SRE.",
+                "Abrir mesa SRE",
+                properties.getConsoleUrl() + "?tab=guardian");
+        String subject = "[KeepGuard Guardian] Tempestade no cluster — "
+                + assessment.unavailableDeployments() + " serviços afetados";
+        return fanoutWithCooldown(incident, "STORM_OPENED", subject, html,
+                "storm:opened:" + incident.getId());
+    }
+
+    public boolean fanoutStormNormalized(Incident incident, ClusterStormAssessment assessment) {
+        String html = mesaHtml(
+                "Cluster normalizado após tempestade",
+                incident,
+                "O cluster voltou ao normal após " + incident.getHealthyStreak()
+                        + " varreduras saudáveis consecutivas.",
+                incident.getAiSummary() != null ? incident.getAiSummary() : "",
+                "Ver incidente",
+                properties.getConsoleUrl() + "?tab=guardian");
+        String subject = "[KeepGuard Guardian] Cluster normalizado — tempestade encerrada";
+        return fanoutWithCooldown(incident, "STORM_NORMALIZED", subject, html,
+                "storm:normalized:" + incident.getId());
+    }
+
+    private boolean fanoutWithCooldown(Incident incident, String kind, String subject, String html, String cooldownScope) {
+        List<GuardianAlertRecipient> recipients = recipientService.listEnabledOrSeed();
+        boolean anySent = false;
+        UUID cid = incident.getId();
+        int cooldown = properties.getAntiFlappingCooldownMinutes();
+        for (GuardianAlertRecipient recipient : recipients) {
+            String scope = cooldownScope + ":" + recipient.getEmail().toLowerCase();
+            if (!alertCooldownPort.tryAcquire(scope, cooldown)) {
+                continue;
+            }
+            boolean sent = emailNotificationService.sendHtmlTo(
+                    recipient.getEmail(), subject, html, incident.getServiceName(),
+                    kind, cid, true);
+            deliveryRepository.save(IncidentAlertDelivery.builder()
+                    .incidentId(incident.getId())
+                    .email(recipient.getEmail())
+                    .outcome(sent ? DeliveryOutcome.SENT : DeliveryOutcome.FAILED)
+                    .kind(kind)
+                    .correlationId(incident.getCorrelationId())
+                    .build());
+            anySent = anySent || sent;
+        }
+        return anySent;
+    }
+
     private boolean fanout(Incident incident, String kind, String subject, String html) {
         List<GuardianAlertRecipient> recipients = recipientService.listEnabledOrSeed();
         boolean anySent = false;
         UUID cid = incident.getId();
+        int cooldown = properties.getAntiFlappingCooldownMinutes();
         for (GuardianAlertRecipient recipient : recipients) {
+            String scope = kind.toLowerCase() + ":" + incident.getServiceName() + ":" + recipient.getEmail().toLowerCase();
+            if (!alertCooldownPort.tryAcquire(scope, cooldown)) {
+                continue;
+            }
             boolean sent = emailNotificationService.sendHtmlTo(
                     recipient.getEmail(), subject, html, incident.getServiceName(),
                     kind, cid, true);

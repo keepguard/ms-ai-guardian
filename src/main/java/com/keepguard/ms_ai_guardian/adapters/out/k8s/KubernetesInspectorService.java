@@ -1,6 +1,8 @@
 package com.keepguard.ms_ai_guardian.adapters.out.k8s;
 
 import com.keepguard.ms_ai_guardian.application.dto.ClusterFacts;
+import com.keepguard.ms_ai_guardian.application.dto.ClusterStormAssessment;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import com.keepguard.ms_ai_guardian.domain.enums.K8sConclusion;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -58,6 +60,104 @@ public class KubernetesInspectorService {
             log.error("Erro ao verificar deployments zerados no namespace {}: {}", namespace, e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    public boolean isAnyNodeNotReady() {
+        try {
+            return k8sClient.nodes().list().getItems().stream().anyMatch(node -> {
+                if (node.getStatus() == null || node.getStatus().getConditions() == null) {
+                    return false;
+                }
+                return node.getStatus().getConditions().stream()
+                        .anyMatch(c -> "Ready".equalsIgnoreCase(c.getType())
+                                && !"True".equalsIgnoreCase(c.getStatus()));
+            });
+        } catch (Exception e) {
+            log.warn("Falha ao verificar readiness dos nós: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    public ClusterStormAssessment assessClusterStorm(String namespace, GuardianProperties.Storm stormConfig) {
+        boolean nodeNotReady = isAnyNodeNotReady();
+        List<Deployment> unavailable = listUnavailableDeployments(namespace);
+        int total = countActiveDeployments(namespace);
+        int unavailableCount = unavailable.size();
+        List<String> serviceNames = unavailable.stream()
+                .map(this::deploymentServiceName)
+                .distinct()
+                .sorted()
+                .toList();
+
+        int thresholdPercent = stormConfig != null ? stormConfig.getDeploymentThresholdPercent() : 40;
+        int minAffected = stormConfig != null ? stormConfig.getMinAffectedDeployments() : 5;
+        int percent = total > 0 ? (unavailableCount * 100) / total : 0;
+
+        boolean massOutage = total > 0
+                && unavailableCount >= minAffected
+                && percent >= thresholdPercent;
+        boolean stormActive = nodeNotReady || massOutage;
+
+        String reason;
+        if (nodeNotReady) {
+            reason = "NODE_NOT_READY";
+        } else if (massOutage) {
+            reason = "MASS_DEPLOYMENT_UNAVAILABLE";
+        } else {
+            reason = "NONE";
+        }
+
+        return new ClusterStormAssessment(
+                nodeNotReady,
+                total,
+                unavailableCount,
+                serviceNames,
+                stormActive,
+                reason);
+    }
+
+    private int countActiveDeployments(String namespace) {
+        try {
+            return (int) k8sClient.apps().deployments().inNamespace(namespace).list().getItems().stream()
+                    .filter(d -> {
+                        Integer desired = d.getSpec() != null ? d.getSpec().getReplicas() : 1;
+                        return desired != null && desired > 0;
+                    })
+                    .count();
+        } catch (Exception e) {
+            log.warn("Falha ao contar deployments em {}: {}", namespace, e.getMessage());
+            return 0;
+        }
+    }
+
+    private List<Deployment> listUnavailableDeployments(String namespace) {
+        try {
+            return k8sClient.apps().deployments().inNamespace(namespace).list().getItems().stream()
+                    .filter(d -> {
+                        Integer desired = d.getSpec() != null ? d.getSpec().getReplicas() : 1;
+                        Integer available = d.getStatus() != null && d.getStatus().getAvailableReplicas() != null
+                                ? d.getStatus().getAvailableReplicas() : 0;
+                        return desired != null && desired > 0 && (available == null || available == 0);
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Erro ao listar deployments indisponíveis no namespace {}: {}", namespace, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private String deploymentServiceName(Deployment deployment) {
+        if (deployment.getMetadata() != null && deployment.getMetadata().getLabels() != null) {
+            String app = deployment.getMetadata().getLabels().get("app");
+            if (app != null && !app.isBlank()) {
+                return app;
+            }
+        }
+        return deployment.getMetadata() != null ? deployment.getMetadata().getName() : "unknown";
+    }
+
+    public boolean isClusterHealthy(String namespace, GuardianProperties.Storm stormConfig) {
+        return !assessClusterStorm(namespace, stormConfig).stormActive();
     }
 
     public boolean isPodUnhealthy(Pod pod) {

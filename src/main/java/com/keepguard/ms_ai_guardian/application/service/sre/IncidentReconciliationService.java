@@ -3,7 +3,9 @@ package com.keepguard.ms_ai_guardian.application.service.sre;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keepguard.ms_ai_guardian.adapters.out.audit.GuardianAuditPublisher;
 import com.keepguard.ms_ai_guardian.adapters.out.k8s.KubernetesInspectorService;
+import com.keepguard.ms_ai_guardian.application.dto.ClusterStormAssessment;
 import com.keepguard.ms_ai_guardian.application.dto.ClusterFacts;
+import com.keepguard.ms_ai_guardian.domain.GuardianClusterConstants;
 import com.keepguard.ms_ai_guardian.domain.entity.Incident;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentEvidence;
 import com.keepguard.ms_ai_guardian.domain.enums.ClosedBy;
@@ -13,6 +15,7 @@ import com.keepguard.ms_ai_guardian.domain.repository.IncidentEvidenceRepository
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +43,8 @@ public class IncidentReconciliationService {
     private final GuardianAuditPublisher auditPublisher;
     private final IncidentEvidenceRepository evidenceRepository;
     private final ObjectMapper objectMapper;
+    private final ClusterStormService clusterStormService;
+    private final GuardianProperties guardianProperties;
 
     @Value("${app.guardian.healthy-streak-required:3}")
     private int streakRequired;
@@ -56,9 +61,18 @@ public class IncidentReconciliationService {
     }
 
     private void reconcileOne(Incident incident) {
-        ClusterFacts facts = k8sInspector.collectFacts(
-                incident.getNamespace(), incident.getPodName(), incident.getServiceName());
-        if (facts.isHealthy()) {
+        boolean healthy;
+        ClusterStormAssessment assessment = null;
+        if (GuardianClusterConstants.isClusterIncident(incident.getServiceName())) {
+            assessment = k8sInspector.assessClusterStorm(incident.getNamespace(), guardianProperties.getStorm());
+            healthy = !assessment.stormActive();
+        } else {
+            ClusterFacts facts = k8sInspector.collectFacts(
+                    incident.getNamespace(), incident.getPodName(), incident.getServiceName());
+            healthy = facts.isHealthy();
+        }
+
+        if (healthy) {
             incident.setHealthyStreak(incident.getHealthyStreak() + 1);
             lifecycleService.record(incident, LifecycleEventType.HEALTH_CHECK_PASS,
                     "streak=" + incident.getHealthyStreak() + "/" + streakRequired);
@@ -69,11 +83,25 @@ public class IncidentReconciliationService {
                 incident.setLastSeenAt(LocalDateTime.now());
                 incidentRepository.save(incident);
                 try {
-                    evidenceRepository.save(IncidentEvidence.builder()
-                            .incidentId(incident.getId())
-                            .kind("NORMALIZED_FACTS")
-                            .payloadJson(objectMapper.writeValueAsString(facts.toMap()))
-                            .build());
+                    if (GuardianClusterConstants.isClusterIncident(incident.getServiceName())) {
+                        if (assessment == null) {
+                            assessment = k8sInspector.assessClusterStorm(
+                                    incident.getNamespace(), guardianProperties.getStorm());
+                        }
+                        evidenceRepository.save(IncidentEvidence.builder()
+                                .incidentId(incident.getId())
+                                .kind("STORM_RECOVERED")
+                                .payloadJson(objectMapper.writeValueAsString(assessment))
+                                .build());
+                    } else {
+                        ClusterFacts facts = k8sInspector.collectFacts(
+                                incident.getNamespace(), incident.getPodName(), incident.getServiceName());
+                        evidenceRepository.save(IncidentEvidence.builder()
+                                .incidentId(incident.getId())
+                                .kind("NORMALIZED_FACTS")
+                                .payloadJson(objectMapper.writeValueAsString(facts.toMap()))
+                                .build());
+                    }
                 } catch (Exception ignored) {
                     // evidência é complementar
                 }
@@ -81,7 +109,16 @@ public class IncidentReconciliationService {
                         "Serviço saudável após " + incident.getHealthyStreak() + " varreduras");
                 auditPublisher.publish("GUARDIAN_INCIDENT_NORMALIZED", "SUCCESS",
                         incident.getCorrelationId(), "INCIDENT", incident.getId().toString());
-                alertFanoutService.fanoutNormalized(incident);
+                if (GuardianClusterConstants.isClusterIncident(incident.getServiceName())) {
+                    if (assessment == null) {
+                        assessment = k8sInspector.assessClusterStorm(
+                                incident.getNamespace(), guardianProperties.getStorm());
+                    }
+                    alertFanoutService.fanoutStormNormalized(incident, assessment);
+                    clusterStormService.clearStormState(incident.getNamespace());
+                } else if (!clusterStormService.isStormActive(incident.getNamespace())) {
+                    alertFanoutService.fanoutNormalized(incident);
+                }
                 log.info("Incidente {} NORMALIZED para serviço {}", incident.getId(), incident.getServiceName());
                 return;
             }
@@ -90,7 +127,9 @@ public class IncidentReconciliationService {
         }
         if (incident.getHealthyStreak() > 0 || incident.getStatus() == IncidentStatus.ACTION_RUNNING) {
             lifecycleService.record(incident, LifecycleEventType.HEALTH_CHECK_FAIL,
-                    facts.getConclusion() != null ? facts.getConclusion().name() : "unhealthy");
+                    GuardianClusterConstants.isClusterIncident(incident.getServiceName())
+                            ? "storm-active"
+                            : "unhealthy");
         }
         incident.setHealthyStreak(0);
         incident.setLastSeenAt(LocalDateTime.now());

@@ -22,6 +22,7 @@ public class GuardianProperties {
     private String approverDisplayName = "time";
     private Redis redis = new Redis();
     private RateLimit rateLimit = new RateLimit();
+    private Storm storm = new Storm();
 
     @Getter
     @Setter
@@ -39,5 +40,18 @@ public class GuardianProperties {
         private int githubPerSecond = 10;
         private int llmPerSecond = 5;
         private int emailPerSecond = 20;
+    }
+
+    @Getter
+    @Setter
+    public static class Storm {
+        /** Percentual mínimo de deployments indisponíveis para considerar tempestade. */
+        private int deploymentThresholdPercent = 40;
+        /** Mínimo de deployments afetados (além do percentual). */
+        private int minAffectedDeployments = 5;
+        /** Varreduras consecutivas antes de alertar falha de infra isolada (não tempestade). */
+        private int infraAlertConfirmScans = 2;
+        /** TTL do estado de tempestade no Redis (segundos). */
+        private int stateTtlSeconds = 7200;
     }
 }
