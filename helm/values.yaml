@@ -25,6 +25,7 @@ env:
   redisHost: "redis"
   redisPort: "6379"
   defaultRecipient: ""
+  consoleUrl: "https://app-core.keepguard.com.br"
   tenantId: ""
   approverGithub: "human"
   approverDisplayName: "time"

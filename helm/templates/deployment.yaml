@@ -59,6 +59,8 @@ spec:
           value: "srv-audit-exchange-prod"
         - name: APP_GUARDIAN_DEFAULT_RECIPIENT
           value: {{ .Values.env.defaultRecipient | quote }}
+        - name: APP_GUARDIAN_CONSOLE_URL
+          value: {{ .Values.env.consoleUrl | default "https://app-core.keepguard.com.br" | quote }}
         - name: APP_GUARDIAN_TENANT_ID
           value: {{ .Values.env.tenantId | quote }}
         - name: APP_GUARDIAN_APPROVER_GITHUB

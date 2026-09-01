@@ -89,7 +89,7 @@ app:
     anti-flapping-cooldown-minutes: 15
     healthy-streak-required: 3
     max-alert-recipients: 20
-    console-url: ${APP_GUARDIAN_CONSOLE_URL:https://app.keepguard.com.br}
+    console-url: ${APP_GUARDIAN_CONSOLE_URL:https://app-core.keepguard.com.br}
     default-recipient: ${APP_GUARDIAN_DEFAULT_RECIPIENT:}
     tenant-id: ${APP_GUARDIAN_TENANT_ID:}
     approver-github: ${APP_GUARDIAN_APPROVER_GITHUB:human}

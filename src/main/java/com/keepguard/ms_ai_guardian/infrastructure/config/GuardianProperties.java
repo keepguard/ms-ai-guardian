@@ -15,7 +15,7 @@ public class GuardianProperties {
     private int antiFlappingCooldownMinutes = 15;
     private int healthyStreakRequired = 3;
     private int maxAlertRecipients = 20;
-    private String consoleUrl = "https://app.keepguard.com.br";
+    private String consoleUrl = "https://app-core.keepguard.com.br";
     private String defaultRecipient = "";
     private String tenantId = "";
     private String approverGithub = "human";
