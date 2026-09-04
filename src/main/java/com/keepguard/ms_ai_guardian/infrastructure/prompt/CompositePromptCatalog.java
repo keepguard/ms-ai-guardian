@@ -16,6 +16,7 @@ import org.springframework.util.DigestUtils;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -69,17 +70,58 @@ public class CompositePromptCatalog implements PromptCatalogPort {
     }
 
     public PromptTemplate seedIfAbsent(String key) {
-        if (repository.existsByPromptKeyAndStatus(key, ACTIVE)) {
+        return seedOrRefresh(key);
+    }
+
+    /**
+     * Semear prompt novo ou atualizar o ativo quando o arquivo do classpath mudou.
+     */
+    public PromptTemplate seedOrRefresh(String key) {
+        String body = loadClasspath(key);
+        String checksum = DigestUtils.md5DigestAsHex(body.getBytes(StandardCharsets.UTF_8));
+        Optional<PromptTemplate> existing = repository.findFirstByPromptKeyAndStatusOrderByUpdatedAtDesc(key, ACTIVE);
+        if (existing.isEmpty()) {
+            return repository.save(PromptTemplate.builder()
+                    .promptKey(key)
+                    .version("1")
+                    .body(body)
+                    .status(ACTIVE)
+                    .checksum(checksum)
+                    .build());
+        }
+        return refreshIfChanged(existing.get(), body, checksum);
+    }
+
+    private PromptTemplate refreshIfChanged(PromptTemplate existing, String body, String checksum) {
+        if (checksum.equals(existing.getChecksum()) && body.equals(existing.getBody())) {
             return null;
         }
-        String body = loadClasspath(key);
-        return repository.save(PromptTemplate.builder()
-                .promptKey(key)
-                .version("1")
-                .body(body)
-                .status(ACTIVE)
-                .checksum(DigestUtils.md5DigestAsHex(body.getBytes(StandardCharsets.UTF_8)))
-                .build());
+        existing.setBody(body);
+        existing.setChecksum(checksum);
+        existing.setVersion(nextVersion(existing.getVersion()));
+        PromptTemplate saved = repository.save(existing);
+        evictPromptCache(existing.getPromptKey());
+        log.info("Prompt {} atualizado para a versão {}", existing.getPromptKey(), saved.getVersion());
+        return saved;
+    }
+
+    private void evictPromptCache(String key) {
+        try {
+            redisTemplate.delete(properties.getRedis().getKeyPrefix() + ":prompt:" + key);
+        } catch (Exception e) {
+            log.debug("Não foi possível invalidar cache do prompt {}: {}", key, e.getMessage());
+        }
+    }
+
+    private static String nextVersion(String current) {
+        if (current == null || current.isBlank() || "classpath".equals(current)) {
+            return "2";
+        }
+        try {
+            return String.valueOf(Integer.parseInt(current) + 1);
+        } catch (NumberFormatException e) {
+            return current + ".pt";
+        }
     }
 
     public static String[] keys() {

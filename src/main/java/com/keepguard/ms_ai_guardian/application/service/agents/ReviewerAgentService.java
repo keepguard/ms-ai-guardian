@@ -11,6 +11,7 @@ import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
 import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,10 +92,11 @@ public class ReviewerAgentService {
         }
         try {
             var snap = prompts.snapshot(PromptKeys.REVIEWER_HOTFIX_SCOPE);
-            String prompt = prompts.render(PromptKeys.REVIEWER_HOTFIX_SCOPE, Map.of(
+            String prompt = GuardianPortuguese.NARRATIVE_LANGUAGE_RULE + "\n"
+                    + prompts.render(PromptKeys.REVIEWER_HOTFIX_SCOPE, Map.of(
                     "serviceName", serviceName,
                     "filePath", filePath,
-                    "errorReason", scope.errorReason(),
+                    "errorReason", GuardianPortuguese.errorReason(scope.errorReason()),
                     "rootCause", scope.rootCause(),
                     "code", LlmContextLimiter.tail(code, 8000)));
             String fallback = "VEREDITO: APROVADO\nHotfix revisado com timeout/fallback do LLM.";

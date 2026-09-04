@@ -12,6 +12,7 @@ import com.keepguard.ms_ai_guardian.domain.enums.PullRequestStatus;
 import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import com.keepguard.ms_ai_guardian.infrastructure.util.ScopedSourcePatcher;
 import lombok.RequiredArgsConstructor;
@@ -310,8 +311,8 @@ public class CoderAgentService {
         Map<String, String> vars = new HashMap<>();
         vars.put("serviceName", nvl(incident.getServiceName()));
         vars.put("podName", nvl(incident.getPodName()));
-        vars.put("severity", incident.getSeverity() != null ? incident.getSeverity().name() : "—");
-        vars.put("errorReason", nvl(incident.getErrorReason()));
+        vars.put("severity", GuardianPortuguese.severity(incident.getSeverity()));
+        vars.put("errorReason", GuardianPortuguese.errorReason(incident.getErrorReason()));
         vars.put("filePath", nvl(filePath));
         vars.put("rootCause", nvl(rootCause));
         vars.put("action", nvl(action));

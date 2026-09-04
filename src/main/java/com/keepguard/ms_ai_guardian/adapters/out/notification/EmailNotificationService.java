@@ -7,6 +7,7 @@ import com.keepguard.ms_ai_guardian.application.port.out.notification.Notificati
 import com.keepguard.ms_ai_guardian.application.port.out.notification.NotificationPort;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import com.keepguard.ms_ai_guardian.infrastructure.template.EmailTemplateRenderer;
 import com.keepguard.ms_ai_guardian.infrastructure.template.PlaceholderRenderer;
 import lombok.RequiredArgsConstructor;
@@ -77,7 +78,7 @@ public class EmailNotificationService implements NotificationPort {
             default -> "#2563eb";
         };
         String subject = String.format("🚨 [KeepGuard AI Guardian] Incidente: %s (%s)",
-                result.getServiceName(), result.getSeverity());
+                result.getServiceName(), GuardianPortuguese.severity(result.getSeverity()));
         return send(new NotificationCommand(
                 NotificationKind.INCIDENT_DIAGNOSTIC,
                 subject,
@@ -85,7 +86,7 @@ public class EmailNotificationService implements NotificationPort {
                         "headerColor", color,
                         "serviceName", nvl(result.getServiceName()),
                         "podName", nvl(result.getPodName()),
-                        "severity", result.getSeverity().name(),
+                        "severity", GuardianPortuguese.severity(result.getSeverity()),
                         "rootCause", PlaceholderRenderer.html(result.getRootCause()),
                         "recommendedAction", PlaceholderRenderer.html(result.getRecommendedAction()),
                         "generatedAt", LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))
@@ -107,7 +108,7 @@ public class EmailNotificationService implements NotificationPort {
                         "repoName", nvl(pr.getRepoName()),
                         "prNumber", String.valueOf(pr.getPrNumber()),
                         "branchName", nvl(pr.getBranchName()),
-                        "errorReason", nvl(incident != null ? incident.getErrorReason() : null),
+                        "errorReason", GuardianPortuguese.errorReason(incident != null ? incident.getErrorReason() : null),
                         "rootCause", PlaceholderRenderer.html(incident != null ? incident.getRootCause() : null),
                         "filePath", nvl(pr.getFilePath()),
                         "recommendedAction", PlaceholderRenderer.html(incident != null ? incident.getRecommendedAction() : null),

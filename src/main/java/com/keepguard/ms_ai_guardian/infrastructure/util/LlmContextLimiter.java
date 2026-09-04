@@ -23,7 +23,7 @@ public final class LlmContextLimiter {
         if (text.length() <= maxChars) {
             return text;
         }
-        return "...[truncated]\n" + text.substring(text.length() - maxChars);
+        return "...[truncado]\n" + text.substring(text.length() - maxChars);
     }
 
     public static String callWithTimeout(Supplier<String> llmCall, int timeoutSeconds, String fallback) {

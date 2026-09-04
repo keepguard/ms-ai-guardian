@@ -22,7 +22,7 @@ public class CatalogSeeder implements ApplicationRunner {
         int seeded = 0;
         for (String key : PromptKeys.classpathKeys()) {
             try {
-                if (promptCatalog.seedIfAbsent(key) != null) {
+                if (promptCatalog.seedOrRefresh(key) != null) {
                     seeded++;
                 }
             } catch (Exception e) {
@@ -30,7 +30,7 @@ public class CatalogSeeder implements ApplicationRunner {
             }
         }
         if (seeded > 0) {
-            log.info("Prompts semeados no banco: {}", seeded);
+            log.info("Prompts semeados ou atualizados no banco: {}", seeded);
         }
         try {
             classificationCatalog.seedIfEmpty();

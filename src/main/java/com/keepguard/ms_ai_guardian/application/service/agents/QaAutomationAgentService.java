@@ -50,7 +50,7 @@ public class QaAutomationAgentService {
             inScopePass = hasBoundsGuard(fixedCode);
         } else {
             inScopeName = "TC-01: Alteração no fluxo do incidente";
-            inScopeDesc = "Há diff no arquivo alvo para o errorReason reportado";
+            inScopeDesc = "Há diferença no arquivo alvo para o motivo do incidente";
             inScopePass = changed;
         }
 
@@ -182,8 +182,8 @@ public class QaAutomationAgentService {
             sb.append("| :--- | :--- | :--- | :---: |\n");
             for (var tc : testCases) {
                 String statusIcon = switch (tc.status()) {
-                    case PASSED -> "✅ PASS";
-                    case FAILED -> "❌ FAIL";
+                    case PASSED -> "✅ PASSOU";
+                    case FAILED -> "❌ FALHOU";
                     case OUT_OF_SCOPE -> "⏭️ FORA DO ESCOPO";
                 };
                 sb.append(String.format("| `%s` | %s | %s | **%s** |\n",

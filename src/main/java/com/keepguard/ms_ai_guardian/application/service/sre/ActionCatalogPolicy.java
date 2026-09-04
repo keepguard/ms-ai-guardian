@@ -5,6 +5,7 @@ import com.keepguard.ms_ai_guardian.application.dto.LlmInvestigationResult;
 import com.keepguard.ms_ai_guardian.domain.enums.ActionRisk;
 import com.keepguard.ms_ai_guardian.domain.enums.K8sConclusion;
 import com.keepguard.ms_ai_guardian.domain.enums.RemediationActionType;
+import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -47,13 +48,14 @@ public final class ActionCatalogPolicy {
                 || "Unknown".equalsIgnoreCase(facts.getPhase());
         String disabled = null;
         if (crash) {
-            disabled = "CrashLoopBackOff: o ReplicaSet já reinicia o container; recriar o pod não corrige o processo.";
+            disabled = "O container está em loop de reinício: o ReplicaSet já reinicia o processo; recriar o pod não corrige a causa.";
         } else if (image) {
-            disabled = "Falha de imagem/config; recriar o pod não resolve pull/registry.";
+            disabled = "Falha de imagem ou configuração; recriar o pod não resolve o pull no registry.";
         } else if (zero) {
-            disabled = "Deployment com replicas=0 de propósito.";
+            disabled = "Deployment com réplicas zeradas de propósito.";
         } else if (!nodeOrTransient) {
-            disabled = "Conclusão K8s (" + safeConclusion(facts) + ") não indica pod órfão ou falha de nó.";
+            disabled = "Conclusão K8s (" + GuardianPortuguese.k8sConclusion(facts.getConclusion())
+                    + ") não indica pod órfão ou falha de nó.";
         }
         return draft(RemediationActionType.RECREATE_POD, ActionRisk.LOW, disabled, recommended,
                 payload(facts));
@@ -68,13 +70,13 @@ public final class ActionCatalogPolicy {
         boolean outage = desired != null && desired > 0 && (available == null || available == 0);
         String disabled = null;
         if (crash) {
-            disabled = "CrashLoopBackOff: restart cego mascara o defeito.";
+            disabled = "O container está em loop de reinício: um restart cego mascara o defeito.";
         } else if (image) {
-            disabled = "ImagePull/config: rollout não puxa uma imagem inválida.";
+            disabled = "Falha de imagem ou configuração: o rollout não puxa uma imagem inválida.";
         } else if (zero) {
-            disabled = "replicas=0 intencional; use scale apenas com confirmação destrutiva se for o caso.";
+            disabled = "Réplicas zeradas de propósito; use scale apenas com confirmação destrutiva se for o caso.";
         } else if (!outage) {
-            disabled = "Deployment não está com available=0 e desired>0.";
+            disabled = "O deployment não está com zero réplicas disponíveis e desejadas maiores que zero.";
         }
         return draft(RemediationActionType.ROLLOUT_RESTART, ActionRisk.HIGH, disabled, recommended,
                 payload(facts));
@@ -90,7 +92,7 @@ public final class ActionCatalogPolicy {
         if (!hasPrevious) {
             disabled = "Não há ReplicaSet anterior para rollback.";
         } else if (!outage) {
-            disabled = "Sem outage de réplicas; rollback não é a primeira opção.";
+            disabled = "Sem indisponibilidade de réplicas; rollback não é a primeira opção.";
         }
         return draft(RemediationActionType.ROLLBACK_REVISION, ActionRisk.HIGH, disabled, recommended,
                 payload(facts));
@@ -106,11 +108,11 @@ public final class ActionCatalogPolicy {
         boolean outage = desired != null && desired > 0 && (available == null || available == 0);
         String disabled = null;
         if (zero) {
-            disabled = "replicas=0 parece intencional; scale replay desabilitado.";
+            disabled = "Réplicas zeradas parecem intencionais; replay de escala desabilitado.";
         } else if (crash || image) {
-            disabled = "Sintoma de CrashLoop/imagem: zerar e subir não corrige a causa.";
+            disabled = "Sintoma de loop de reinício ou imagem: zerar e subir não corrige a causa.";
         } else if (!transientInfra || !outage) {
-            disabled = "Scale replay só quando a conclusão é TRANSIENT_INFRA_RECOVERABLE com desired>0.";
+            disabled = "Replay de escala só quando a conclusão é infraestrutura transitória recuperável com réplicas desejadas maiores que zero.";
         }
         return draft(RemediationActionType.SCALE_REPLAY, ActionRisk.DESTRUCTIVE, disabled, recommended,
                 payload(facts));
@@ -142,10 +144,6 @@ public final class ActionCatalogPolicy {
             return "";
         }
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
-    private static String safeConclusion(ClusterFacts facts) {
-        return facts.getConclusion() != null ? facts.getConclusion().name() : "UNKNOWN";
     }
 
     public static Set<RemediationActionType> catalog() {

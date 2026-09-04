@@ -8,6 +8,7 @@ import com.keepguard.ms_ai_guardian.application.port.out.llm.LlmPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptCatalogPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptKeys;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,7 @@ public class LlmInvestigationService {
             var snap = prompts.snapshot(PromptKeys.SRE_INVESTIGATE);
             Map<String, String> vars = new HashMap<>();
             vars.put("errorReason", nvl(errorReason));
+            vars.put("errorReasonLabel", GuardianPortuguese.errorReason(errorReason));
             vars.put("namespace", nvl(facts.getNamespace()));
             vars.put("serviceName", nvl(facts.getServiceName()));
             vars.put("podName", nvl(facts.getPodName()));
@@ -47,16 +49,21 @@ public class LlmInvestigationService {
             vars.put("readyReplicas", String.valueOf(facts.getReadyReplicas()));
             vars.put("replicaSetCount", String.valueOf(facts.getReplicaSetCount()));
             vars.put("phase", nvl(facts.getPhase()));
+            vars.put("phaseLabel", GuardianPortuguese.phase(facts.getPhase()));
             vars.put("waitingReason", nvl(facts.getWaitingReason()));
+            vars.put("waitingReasonLabel", GuardianPortuguese.waitingReason(facts.getWaitingReason()));
             vars.put("terminatedReason", nvl(facts.getTerminatedReason()));
+            vars.put("terminatedReasonLabel", GuardianPortuguese.waitingReason(facts.getTerminatedReason()));
             vars.put("restartCount", String.valueOf(facts.getRestartCount()));
             vars.put("crashLoop", String.valueOf(facts.isCrashLoop()));
             vars.put("imagePullFailure", String.valueOf(facts.isImagePullFailure()));
             vars.put("replicasIntentionallyZero", String.valueOf(facts.isReplicasIntentionallyZero()));
             vars.put("conclusion", facts.getConclusion() != null ? facts.getConclusion().name() : "UNKNOWN");
+            vars.put("conclusionLabel", GuardianPortuguese.k8sConclusion(facts.getConclusion()));
             vars.put("warningEvents", String.valueOf(facts.getWarningEvents()));
             vars.put("logsSnippet", LlmContextLimiter.tail(facts.getLogsSnippet(), 1200));
-            String prompt = prompts.render(PromptKeys.SRE_INVESTIGATE, vars);
+            String prompt = GuardianPortuguese.NARRATIVE_LANGUAGE_RULE + "\n"
+                    + prompts.render(PromptKeys.SRE_INVESTIGATE, vars);
             return llmPort.complete(new LlmPort.LlmRequest(
                             prompt, llmProperties.getTimeoutSeconds(), snap.key(), snap.version(), null))
                     .map(raw -> {
@@ -76,12 +83,12 @@ public class LlmInvestigationService {
     }
 
     static LlmInvestigationResult heuristic(ClusterFacts facts, String errorReason) {
-        String conclusion = facts.getConclusion() != null ? facts.getConclusion().name() : "UNKNOWN";
-        String root = (errorReason != null ? errorReason : "anomalia") + " — conclusão K8s: " + conclusion;
+        String root = GuardianPortuguese.errorReason(errorReason)
+                + " — conclusão K8s: " + GuardianPortuguese.k8sConclusion(facts.getConclusion());
         String summary = "O controlador " + (facts.isHealthy() ? "parece saudável" : "não restabeleceu o serviço")
-                + ". desired=" + facts.getDesiredReplicas()
-                + " available=" + facts.getAvailableReplicas()
-                + " waiting=" + facts.getWaitingReason();
+                + ". Réplicas desejadas: " + facts.getDesiredReplicas()
+                + "; disponíveis: " + facts.getAvailableReplicas()
+                + "; motivo de espera: " + GuardianPortuguese.waitingReason(facts.getWaitingReason()) + ".";
         List<String> recommended = new ArrayList<>();
         if (facts.getConclusion() != null) {
             switch (facts.getConclusion()) {

@@ -75,7 +75,7 @@ public class IncidentReconciliationService {
         if (healthy) {
             incident.setHealthyStreak(incident.getHealthyStreak() + 1);
             lifecycleService.record(incident, LifecycleEventType.HEALTH_CHECK_PASS,
-                    "streak=" + incident.getHealthyStreak() + "/" + streakRequired);
+                    "sequência saudável " + incident.getHealthyStreak() + "/" + streakRequired);
             if (incident.getHealthyStreak() >= streakRequired) {
                 incident.setStatus(IncidentStatus.NORMALIZED);
                 incident.setNormalizedAt(LocalDateTime.now());
@@ -128,8 +128,8 @@ public class IncidentReconciliationService {
         if (incident.getHealthyStreak() > 0 || incident.getStatus() == IncidentStatus.ACTION_RUNNING) {
             lifecycleService.record(incident, LifecycleEventType.HEALTH_CHECK_FAIL,
                     GuardianClusterConstants.isClusterIncident(incident.getServiceName())
-                            ? "storm-active"
-                            : "unhealthy");
+                            ? "tempestade ainda ativa"
+                            : "serviço ainda indisponível");
         }
         incident.setHealthyStreak(0);
         incident.setLastSeenAt(LocalDateTime.now());

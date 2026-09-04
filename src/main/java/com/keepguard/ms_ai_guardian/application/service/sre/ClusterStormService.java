@@ -15,6 +15,7 @@ import com.keepguard.ms_ai_guardian.domain.enums.LifecycleEventType;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentEvidenceRepository;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -148,7 +149,7 @@ public class ClusterStormService {
                 .lastSeenAt(LocalDateTime.now())
                 .k8sConclusion(assessment.nodeNotReady() ? "NODE_FAILURE" : "TRANSIENT_INFRA_RECOVERABLE")
                 .aiSummary(buildStormSummary(assessment))
-                .aiRootCauseAnalysis("Tempestade de infraestrutura: " + assessment.stormReason())
+                .aiRootCauseAnalysis("Tempestade de infraestrutura: " + GuardianPortuguese.stormReason(assessment.stormReason()))
                 .aiRecommendedAction("Aguardar recuperação do cluster. Verificar saúde do nó e kubelet.")
                 .targetRecipientEmail(properties.getDefaultRecipient())
                 .notificationSent(false)
@@ -157,7 +158,8 @@ public class ClusterStormService {
                 .build();
 
         incident = incidentRepository.save(incident);
-        lifecycleService.record(incident, LifecycleEventType.DETECTED, assessment.stormReason());
+        lifecycleService.record(incident, LifecycleEventType.DETECTED,
+                GuardianPortuguese.stormReason(assessment.stormReason()));
         auditPublisher.publish("GUARDIAN_CLUSTER_STORM_OPENED", "SUCCESS",
                 incident.getCorrelationId(), "INCIDENT", incident.getId().toString());
         persistStormEvidence(incident.getId(), assessment);
@@ -191,7 +193,7 @@ public class ClusterStormService {
                 : String.join(", ", services);
         return assessment.unavailableDeployments() + " de " + assessment.totalDeployments()
                 + " deployments indisponíveis (" + assessment.unavailablePercent() + "%). "
-                + "Motivo: " + assessment.stormReason()
+                + "Motivo: " + GuardianPortuguese.stormReason(assessment.stormReason())
                 + (sample.isBlank() ? "" : ". Ex.: " + sample);
     }
 

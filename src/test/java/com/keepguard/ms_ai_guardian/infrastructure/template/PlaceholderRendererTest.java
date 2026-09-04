@@ -32,6 +32,15 @@ class PlaceholderRendererTest {
     }
 
     @Test
+    void sreInvestigatePromptRequiresPortugueseNarrative() {
+        ClasspathResourceLoader loader = new ClasspathResourceLoader();
+        String body = loader.load("prompts/sre.investigate.st");
+        assertTrue(body.contains("português brasileiro"));
+        assertTrue(body.contains("{{errorReasonLabel}}"));
+        assertTrue(body.contains("{{conclusionLabel}}"));
+    }
+
+    @Test
     void emailTemplatesExist() {
         ClasspathResourceLoader loader = new ClasspathResourceLoader();
         assertTrue(loader.load("templates/email/pr-opened.html").contains("{{prNumber}}"));

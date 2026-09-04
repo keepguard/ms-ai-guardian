@@ -18,4 +18,4 @@ Regras:
 Responda começando exatamente com uma destas linhas:
 VEREDITO: APROVADO
 VEREDITO: REPROVADO
-Depois explique o hotfix e, se couber, as observações fora do escopo.
+Depois explique o hotfix em português brasileiro e, se couber, as observações fora do escopo. Não escreva o parecer em inglês.

@@ -92,7 +92,7 @@ public class IncidentRemediationService {
             incident.setStatus(IncidentStatus.ACTION_RUNNING);
             incident.setHealthyStreak(0);
             incidentRepository.save(incident);
-            lifecycleService.record(incident, LifecycleEventType.ACTION_APPLIED, suggestion.getActionType().name());
+            lifecycleService.record(incident, LifecycleEventType.ACTION_APPLIED, suggestion.getActionType().label());
             auditPublisher.publish("GUARDIAN_REMEDIATION_APPLIED", "SUCCESS", cid, "INCIDENT",
                     incidentId.toString(), "USER", actorUserId);
             var execution = saveExecution(incident, suggestion, actorUserId, actorEmail, actorRole, cid, "SUCCESS",

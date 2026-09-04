@@ -10,6 +10,7 @@ import com.keepguard.ms_ai_guardian.domain.entity.IncidentAlertDelivery;
 import com.keepguard.ms_ai_guardian.domain.enums.DeliveryOutcome;
 import com.keepguard.ms_ai_guardian.domain.repository.IncidentAlertDeliveryRepository;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +32,7 @@ public class AlertFanoutService {
     public boolean fanoutOpened(Incident incident, List<IncidentActionSuggestion> suggestions) {
         String enabled = suggestions.stream()
                 .filter(IncidentActionSuggestion::isEnabled)
-                .map(s -> s.getLabel() + " (" + s.getRisk() + ")")
+                .map(s -> s.getLabel() + " (risco " + s.getRisk().label() + ")")
                 .collect(Collectors.joining("<br/>"));
         if (enabled.isBlank()) {
             enabled = "Nenhuma ação habilitada pela política — abrir a mesa para detalhes.";
@@ -45,7 +46,9 @@ public class AlertFanoutService {
                 "Abrir mesa SRE",
                 cta);
         String subject = "[KeepGuard Guardian] " + incident.getServiceName() + " — "
-                + (incident.getK8sConclusion() != null ? incident.getK8sConclusion() : incident.getErrorReason());
+                + (incident.getK8sConclusion() != null
+                        ? GuardianPortuguese.k8sConclusion(incident.getK8sConclusion())
+                        : GuardianPortuguese.errorReason(incident.getErrorReason()));
         return fanout(incident, "OPENED", subject, html);
     }
 
@@ -80,7 +83,7 @@ public class AlertFanoutService {
                 .orElse("—");
         String body = "Tempestade de infraestrutura detectada no namespace <strong>" + n(incident.getNamespace())
                 + "</strong>.<br/><br/>"
-                + "<strong>Motivo:</strong> " + assessment.stormReason() + "<br/>"
+                + "<strong>Motivo:</strong> " + GuardianPortuguese.stormReason(assessment.stormReason()) + "<br/>"
                 + "<strong>Deployments indisponíveis:</strong> " + assessment.unavailableDeployments()
                 + " / " + assessment.totalDeployments()
                 + " (" + assessment.unavailablePercent() + "%)<br/><br/>"
@@ -167,7 +170,7 @@ public class AlertFanoutService {
                 "title", n(title),
                 "serviceName", n(incident.getServiceName()),
                 "podName", n(incident.getPodName()),
-                "k8sConclusion", n(incident.getK8sConclusion()),
+                "k8sConclusion", GuardianPortuguese.k8sConclusion(incident.getK8sConclusion()),
                 "body", n(body).replace("\n", "<br/>"),
                 "extra", n(extra).replace("\n", "<br/>"),
                 "ctaUrl", ctaUrl,
