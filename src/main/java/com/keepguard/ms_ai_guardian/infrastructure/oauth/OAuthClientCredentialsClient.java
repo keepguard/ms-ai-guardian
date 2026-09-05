@@ -1,6 +1,7 @@
 package com.keepguard.ms_ai_guardian.infrastructure.oauth;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,7 @@ public class OAuthClientCredentialsClient {
     private final Map<String, CacheEntry> tokens = new ConcurrentHashMap<>();
     private final Map<String, SecretEntry> secrets = new ConcurrentHashMap<>();
 
+    @Autowired
     public OAuthClientCredentialsClient(
             @Value("${auth.base-url:http://ms-auth:8081}") String authBaseUrl,
             @Value("${auth.client-id:ms-ai-guardian}") String clientId,
