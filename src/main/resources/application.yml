@@ -59,7 +59,7 @@ spring:
           temperature: ${APP_GUARDIAN_LLM_TEMPERATURE:0.2}
           num-predict: ${APP_GUARDIAN_LLM_MAX_TOKENS:256}
     openai:
-      api-key: ${SPRING_AI_OPENAI_API_KEY:}
+      api-key: ${SPRING_AI_OPENAI_API_KEY:disabled}
       base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.openai.com}
       embedding:
         enabled: false
