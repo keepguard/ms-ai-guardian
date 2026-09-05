@@ -130,6 +130,12 @@ app:
     email-exchange: srv-email-google-sender-exchange-dev
     email-routing-key: email.google.send
 
+auth:
+  base-url: ${AUTH_BASE_URL:http://ms-auth:8081}
+  client-id: ${AUTH_CLIENT_ID:ms-ai-guardian}
+  secret-base: ${AUTH_CLIENT_SECRET_BASE:}
+  token-renew-before-seconds: ${AUTH_TOKEN_RENEW_BEFORE_SECONDS:600}
+
 keepguard:
   audit:
     enabled: true

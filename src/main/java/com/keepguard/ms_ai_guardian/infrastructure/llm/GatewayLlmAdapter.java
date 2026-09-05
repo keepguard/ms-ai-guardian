@@ -5,6 +5,7 @@ import com.keepguard.ms_ai_guardian.domain.entity.LlmInvocation;
 import com.keepguard.ms_ai_guardian.domain.repository.LlmInvocationRepository;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.oauth.OAuthClientCredentialsClient;
 import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -31,16 +32,19 @@ public class GatewayLlmAdapter implements LlmPort {
     private final GuardianLlmProperties llmProperties;
     private final GuardianProperties guardianProperties;
     private final LlmInvocationRepository invocationRepository;
+    private final OAuthClientCredentialsClient oauthClient;
     private final RestClient restClient;
 
     public GatewayLlmAdapter(
             GuardianLlmProperties llmProperties,
             GuardianProperties guardianProperties,
             LlmInvocationRepository invocationRepository,
+            OAuthClientCredentialsClient oauthClient,
             @Qualifier("llmGatewayRestClient") RestClient restClient) {
         this.llmProperties = llmProperties;
         this.guardianProperties = guardianProperties;
         this.invocationRepository = invocationRepository;
+        this.oauthClient = oauthClient;
         this.restClient = restClient;
     }
 
@@ -101,9 +105,7 @@ public class GatewayLlmAdapter implements LlmPort {
                                             headers.set("X-Company-Id", companyId);
                                         }
                                         headers.set("X-Correlation-ID", correlationId);
-                                        if (StringUtils.hasText(llmProperties.getGatewayBearerToken())) {
-                                            headers.setBearerAuth(llmProperties.getGatewayBearerToken().trim());
-                                        }
+                                        bearer(companyId).ifPresent(headers::setBearerAuth);
                                     })
                                     .body(payload)
                                     .retrieve()
@@ -145,6 +147,23 @@ public class GatewayLlmAdapter implements LlmPort {
         } catch (Exception e) {
             log.debug("Não foi possível persistir invocação LLM: {}", e.getMessage());
         }
+    }
+
+    private Optional<String> bearer(String companyId) {
+        if (oauthClient != null && StringUtils.hasText(companyId)) {
+            try {
+                Optional<String> token = oauthClient.getToken(UUID.fromString(companyId));
+                if (token.isPresent()) {
+                    return token;
+                }
+            } catch (IllegalArgumentException ignored) {
+                // tenantId legado pode não ser UUID
+            }
+        }
+        if (StringUtils.hasText(llmProperties.getGatewayBearerToken())) {
+            return Optional.of(llmProperties.getGatewayBearerToken().trim());
+        }
+        return Optional.empty();
     }
 
     private static String nvl(String value) {

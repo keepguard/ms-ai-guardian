@@ -6,6 +6,7 @@ import com.keepguard.ms_ai_guardian.domain.entity.LlmInvocation;
 import com.keepguard.ms_ai_guardian.domain.repository.LlmInvocationRepository;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
+import com.keepguard.ms_ai_guardian.infrastructure.oauth.OAuthClientCredentialsClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +48,8 @@ class GatewayLlmAdapterTest {
     private GuardianProperties guardianProperties;
     @Mock
     private LlmInvocationRepository invocationRepository;
+    @Mock
+    private OAuthClientCredentialsClient oauthClient;
 
     private MockRestServiceServer server;
     private GatewayLlmAdapter adapter;
@@ -58,7 +61,8 @@ class GatewayLlmAdapterTest {
         RestClient restClient = RestClient.create(restTemplate);
         lenient().when(llmProperties.getGatewayUrl()).thenReturn(GATEWAY);
         lenient().when(llmProperties.isEnabled()).thenReturn(true);
-        adapter = new GatewayLlmAdapter(llmProperties, guardianProperties, invocationRepository, restClient);
+        lenient().when(oauthClient.getToken(any())).thenReturn(Optional.empty());
+        adapter = new GatewayLlmAdapter(llmProperties, guardianProperties, invocationRepository, oauthClient, restClient);
     }
 
     @Test
@@ -141,16 +145,17 @@ class GatewayLlmAdapterTest {
     }
 
     @Test
-    void completeSendsBearerTokenWhenConfigured() {
+    void completeSendsOAuthBearerWhenAvailable() {
         when(llmProperties.getMaxTokens()).thenReturn(16);
         when(llmProperties.getTemperature()).thenReturn(0.2);
-        when(llmProperties.getGatewayBearerToken()).thenReturn("svc-token");
-        when(guardianProperties.getTenantId()).thenReturn("company-1");
+        UUID companyId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        when(guardianProperties.getTenantId()).thenReturn(companyId.toString());
+        when(oauthClient.getToken(companyId)).thenReturn(Optional.of("oauth-token"));
         when(invocationRepository.save(any(LlmInvocation.class))).thenAnswer(inv -> inv.getArgument(0));
 
         server.expect(requestTo(GATEWAY + "/api/v1/llm/complete"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header("Authorization", "Bearer svc-token"))
+                .andExpect(header("Authorization", "Bearer oauth-token"))
                 .andRespond(withSuccess("""
                         {"content":"ok","model":"gpt-4.1-mini","providerType":"openai"}
                         """, MediaType.APPLICATION_JSON));

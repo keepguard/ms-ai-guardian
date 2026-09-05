@@ -75,6 +75,15 @@ spec:
           value: {{ .Values.env.llmProvider | quote }}
         - name: LLM_GATEWAY_URL
           value: {{ .Values.env.llmGatewayUrl | quote }}
+        - name: AUTH_BASE_URL
+          value: "http://ms-auth:8081"
+        - name: AUTH_CLIENT_ID
+          value: "ms-ai-guardian"
+        - name: AUTH_CLIENT_SECRET_BASE
+          valueFrom:
+            secretKeyRef:
+              name: keepguard-secret
+              key: AUTH_CLIENT_SECRET_BASE
         - name: APP_GUARDIAN_OLLAMA_ENABLED
           value: {{ .Values.env.ollamaEnabled | quote }}
         - name: APP_GUARDIAN_OPENAI_ENABLED
