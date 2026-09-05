@@ -19,7 +19,7 @@ import java.util.Optional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnExpression("!'${app.guardian.llm.provider:none}'.equalsIgnoreCase('gateway')")
+@ConditionalOnExpression("'${app.guardian.llm.provider:none}'.equalsIgnoreCase('ollama') || '${app.guardian.llm.provider:none}'.equalsIgnoreCase('openai')")
 public class SpringAiLlmAdapter implements LlmPort {
 
     private static final String TIMEOUT_SENTINEL = "__LLM_TIMEOUT_OR_EMPTY__";

@@ -10,7 +10,7 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 
 @Configuration
-@ConditionalOnExpression("'${app.guardian.llm.provider:none}'.equalsIgnoreCase('gateway')")
+@ConditionalOnExpression("!'${app.guardian.llm.provider:none}'.equalsIgnoreCase('ollama') && !'${app.guardian.llm.provider:none}'.equalsIgnoreCase('openai')")
 public class GatewayLlmClientConfig {
 
     @Bean(name = "llmGatewayRestClient")

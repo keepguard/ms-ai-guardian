@@ -23,7 +23,7 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-@ConditionalOnExpression("'${app.guardian.llm.provider:none}'.equalsIgnoreCase('gateway')")
+@ConditionalOnExpression("!'${app.guardian.llm.provider:none}'.equalsIgnoreCase('ollama') && !'${app.guardian.llm.provider:none}'.equalsIgnoreCase('openai')")
 public class GatewayLlmAdapter implements LlmPort {
 
     static final String SOURCE_SERVICE = "ms-ai-guardian";
