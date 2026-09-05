@@ -61,6 +61,8 @@ spring:
     openai:
       api-key: ${SPRING_AI_OPENAI_API_KEY:}
       base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.openai.com}
+      embedding:
+        enabled: false
       chat:
         enabled: ${APP_GUARDIAN_OPENAI_ENABLED:false}
         options:
