@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.keepguard</groupId>
 	<artifactId>ms-ai-guardian</artifactId>
-	<version>1.0.43</version>
+	<version>1.0.44</version>
 	<name>ms-ai-guardian</name>
 	<description>KeepGuard AI Guardian - Intelligent Kubernetes Diagnostics and Incident Reasoning Agent</description>
 
@@ -163,15 +163,10 @@
 	</build>
 
 	<!--
-	  LLM: ollama é o default (starter acima). Para API paga, rebuild com perfil
-	  e desligue o Ollama no cluster:
-	    mvn -Popenaai ...     + APP_GUARDIAN_LLM_PROVIDER=openai
-	                            APP_GUARDIAN_OLLAMA_ENABLED=false
-	                            APP_GUARDIAN_OPENAI_ENABLED=true
-	                            SPRING_AI_OPENAI_API_KEY=...
-	    mvn -Panthropic ...   + APP_GUARDIAN_LLM_PROVIDER=anthropic
-	                            APP_GUARDIAN_ANTHROPIC_ENABLED=true
-	                            SPRING_AI_ANTHROPIC_API_KEY=...
+	  LLM: default é none (heurística). Gateway: APP_GUARDIAN_LLM_PROVIDER=gateway.
+	  Legado direto: ollama/openai/anthropic via Spring AI.
+	    APP_GUARDIAN_LLM_PROVIDER=ollama + APP_GUARDIAN_OLLAMA_ENABLED=true
+	    APP_GUARDIAN_LLM_PROVIDER=openai + APP_GUARDIAN_OPENAI_ENABLED=true + SPRING_AI_OPENAI_API_KEY
 	-->
 	<profiles>
 		<profile>

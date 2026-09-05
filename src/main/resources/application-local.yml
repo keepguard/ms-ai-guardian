@@ -21,6 +21,11 @@ spring:
       init:
         pull-model-strategy: never
 
+app:
+  guardian:
+    llm:
+      gateway-url: ${LLM_GATEWAY_URL:http://localhost:8650}
+
 keepguard:
   audit:
     exchange: srv-audit-exchange-local

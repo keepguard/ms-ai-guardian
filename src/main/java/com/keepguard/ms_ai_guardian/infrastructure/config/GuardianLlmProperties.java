@@ -8,16 +8,31 @@ import org.springframework.stereotype.Component;
 
 /**
  * Parâmetros do LLM desacoplados do provedor.
- * Troca Ollama → OpenAI/Anthropic via env/propriedades, sem hardcode no código.
+ * Default: none (heurística). Ligar LLM: APP_GUARDIAN_LLM_PROVIDER=gateway.
  */
 @Getter
 @Slf4j
 @Component
 public class GuardianLlmProperties {
 
-    /** ollama | openai | anthropic | none */
-    @Value("${app.guardian.llm.provider:ollama}")
+    /** gateway | ollama | openai | anthropic | none */
+    @Value("${app.guardian.llm.provider:none}")
     private String provider;
+
+    @Value("${app.guardian.llm.gateway-url:http://srv-llm-gateway:8650}")
+    private String gatewayUrl;
+
+    /** Token Bearer opcional (M2M). Vazio = só headers de tenant na rede interna. */
+    @Value("${app.guardian.llm.gateway-bearer-token:}")
+    private String gatewayBearerToken;
+
+    /** Se preenchido, o complete força este providerId; senão o gateway escolhe o ativo. */
+    @Value("${app.guardian.llm.provider-id:}")
+    private String providerId;
+
+    /** Se preenchido, força o modelo; senão o gateway usa model_default do provedor. */
+    @Value("${app.guardian.llm.model:}")
+    private String model;
 
     @Value("${app.guardian.llm.timeout-seconds:45}")
     private int timeoutSeconds;
@@ -37,7 +52,7 @@ public class GuardianLlmProperties {
 
     @PostConstruct
     void logActiveProvider() {
-        log.info("LLM ativo: provider={} timeout={}s codegenTimeout={}s maxTokens={}",
-                provider, timeoutSeconds, codegenTimeoutSeconds, maxTokens);
+        log.info("LLM ativo: provider={} gatewayUrl={} timeout={}s codegenTimeout={}s maxTokens={}",
+                provider, gatewayUrl, timeoutSeconds, codegenTimeoutSeconds, maxTokens);
     }
 }

@@ -43,8 +43,8 @@ spring:
     password: guest
     connection-timeout: 8000
   ai:
-    # Provedor ativo: app.guardian.llm.provider (ollama | openai | anthropic | none).
-    # Ollama é o default do cluster. Para API paga: desligue o Ollama, ligue o starter e a key.
+    # Provedor ativo: app.guardian.llm.provider (gateway | ollama | openai | anthropic | none).
+    # Gateway: egress via srv-llm-gateway. Ollama/OpenAI diretos ficam como legado.
     ollama:
       base-url: ${SPRING_AI_OLLAMA_BASE_URL:http://ollama:11434}
       init:
@@ -53,7 +53,7 @@ spring:
         timeout: 5s
         max-retries: 0
       chat:
-        enabled: ${APP_GUARDIAN_OLLAMA_ENABLED:true}
+        enabled: ${APP_GUARDIAN_OLLAMA_ENABLED:false}
         options:
           model: ${SPRING_AI_OLLAMA_MODEL:qwen2.5-coder:1.5b}
           temperature: ${APP_GUARDIAN_LLM_TEMPERATURE:0.2}
@@ -110,8 +110,14 @@ app:
       llm-per-second: 5
       email-per-second: 20
     llm:
-      # ollama (cluster) | openai | anthropic | none (só heurística, ChatClient ausente)
-      provider: ${APP_GUARDIAN_LLM_PROVIDER:ollama}
+      # none = só heurística. Para ligar o gateway:
+      #   APP_GUARDIAN_LLM_PROVIDER=gateway
+      #   LLM_GATEWAY_URL=http://srv-llm-gateway:8650
+      provider: ${APP_GUARDIAN_LLM_PROVIDER:none}
+      gateway-url: ${LLM_GATEWAY_URL:http://srv-llm-gateway:8650}
+      gateway-bearer-token: ${LLM_GATEWAY_BEARER_TOKEN:}
+      provider-id: ${APP_GUARDIAN_LLM_PROVIDER_ID:}
+      model: ${APP_GUARDIAN_LLM_MODEL:}
       timeout-seconds: ${APP_GUARDIAN_LLM_TIMEOUT_SECONDS:45}
       codegen-timeout-seconds: ${APP_GUARDIAN_LLM_CODEGEN_TIMEOUT_SECONDS:90}
       max-tokens: ${APP_GUARDIAN_LLM_MAX_TOKENS:256}

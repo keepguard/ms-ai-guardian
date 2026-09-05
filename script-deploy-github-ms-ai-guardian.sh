@@ -181,7 +181,7 @@ log_success "Build Maven concluído com sucesso: $(basename "$JAR_FILE")"
 # 2. Prepara Dockerfile
 log_step "2/5 Preparando Dockerfile..."
 cp "${DOCKERFILE_PATH}" "${DOCKERFILE_PATH}.bak"
-sed "s/VERSION_PLACEHOLDER/${VERSION}/g" "${DOCKERFILE_PATH}.bak" > "${DOCKERFILE_PATH}"
+sed -E "s|target/${SERVICE_NAME}[^ ]+\.jar|target/${SERVICE_NAME}-${VERSION}.jar|g" "${DOCKERFILE_PATH}.bak" > "${DOCKERFILE_PATH}"
 
 # 3. Build Docker Image (linux/amd64)
 log_step "3/5 Construindo imagem Docker (linux/amd64)..."
@@ -194,14 +194,34 @@ docker push "${IMAGE_TAG}"
 docker push "${IMAGE_LATEST}"
 log_success "Push concluído com sucesso"
 
-# 5. Atualização no Cluster Kubernetes (se UP for solicitado)
-if [ "$DEPLOY_DOCKER" = true ]; then
-    log_info "Atualizando deployment no Cluster Kubernetes..."
-    if command -v kubectl &> /dev/null; then
-        kubectl rollout restart deployment/${SERVICE_NAME} -n keepguard 2>/dev/null || true
-        log_success "Rollout disparado no Kubernetes para ${SERVICE_NAME}"
+# 5. Atualização e Deploy Docker Compose
+if [ -f "$DOCKER_COMPOSE_FILE" ]; then
+    log_step "5/5 Atualizando docker-compose.yml..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|image: ${REGISTRY}/${SERVICE_NAME}:.*|image: ${IMAGE_TAG}|g" "${DOCKER_COMPOSE_FILE}"
     else
-        log_info "kubectl local não detectado. A imagem ${IMAGE_TAG} está disponível no GHCR para o cluster."
+        sed -i "s|image: ${REGISTRY}/${SERVICE_NAME}:.*|image: ${IMAGE_TAG}|g" "${DOCKER_COMPOSE_FILE}"
+    fi
+    log_success "docker-compose.yml atualizado para ${IMAGE_TAG}"
+fi
+
+if [ "$DEPLOY_DOCKER" = true ]; then
+    log_info "Iniciando container no Docker Compose..."
+    cd "${PROJECT_ROOT}/docker"
+    docker compose up -d "${SERVICE_NAME}"
+    log_success "Container ${SERVICE_NAME} recriado com sucesso"
+
+    log_info "Aguardando container ${SERVICE_NAME}..."
+    CONTAINER_NAME=$(docker ps --filter "name=${SERVICE_NAME}" --format "{{.Names}}" | head -1)
+    if [ -n "$CONTAINER_NAME" ]; then
+        for i in {1..15}; do
+            STATUS=$(docker inspect --format='{{json .State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo '"running"')
+            if [ "$STATUS" = '"healthy"' ] || [ "$STATUS" = '"running"' ]; then
+                log_success "Container ${CONTAINER_NAME} está saudável (${STATUS})!"
+                break
+            fi
+            sleep 2
+        done
     fi
 fi
 

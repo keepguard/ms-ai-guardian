@@ -68,24 +68,13 @@ kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
   APP_GUARDIAN_ANTHROPIC_ENABLED=false \
   APP_GUARDIAN_LLM_TIMEOUT_SECONDS=45 \
   APP_GUARDIAN_LLM_CODEGEN_TIMEOUT_SECONDS=90 \
-  APP_GUARDIAN_LLM_MAX_TOKENS=4096
+  APP_GUARDIAN_LLM_MAX_TOKENS=4096 \
+  APP_GUARDIAN_LLM_PROVIDER=none \
+  LLM_GATEWAY_URL=http://srv-llm-gateway:8650 \
+  APP_GUARDIAN_OLLAMA_ENABLED=false \
+  APP_GUARDIAN_OPENAI_ENABLED=false
 
-if kubectl get secret keepguard-openai -n "${NAMESPACE}" >/dev/null 2>&1; then
-  echo -e "${CYAN}⚙️  LLM: OpenAI (secret keepguard-openai)${NC}"
-  kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" --from=secret/keepguard-openai
-  kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
-    APP_GUARDIAN_LLM_PROVIDER=openai \
-    APP_GUARDIAN_OLLAMA_ENABLED=false \
-    APP_GUARDIAN_OPENAI_ENABLED=true \
-    SPRING_AI_OPENAI_MODEL=gpt-4.1-mini
-else
-  echo -e "${YELLOW}⚙️  LLM: Ollama (secret keepguard-openai ausente)${NC}"
-  kubectl set env "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" \
-    APP_GUARDIAN_LLM_PROVIDER=ollama \
-    APP_GUARDIAN_OLLAMA_ENABLED=true \
-    APP_GUARDIAN_OPENAI_ENABLED=false \
-    APP_GUARDIAN_LLM_MAX_TOKENS=256
-fi
+echo -e "${CYAN}⚙️  LLM: desligado (APP_GUARDIAN_LLM_PROVIDER=none). Para ligar: kubectl set env deployment/ms-ai-guardian APP_GUARDIAN_LLM_PROVIDER=gateway${NC}"
 
 kubectl patch "deployment/${SERVICE_NAME}" -n "${NAMESPACE}" --type=strategic -p "$(cat <<'EOF'
 spec:

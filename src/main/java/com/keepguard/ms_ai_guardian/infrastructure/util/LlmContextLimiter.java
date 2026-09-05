@@ -36,4 +36,15 @@ public final class LlmContextLimiter {
             return fallback;
         }
     }
+
+    public static <T> T invokeWithTimeout(Supplier<T> call, int timeoutSeconds, T fallback) {
+        try {
+            T result = CompletableFuture.supplyAsync(call)
+                    .orTimeout(timeoutSeconds, TimeUnit.SECONDS)
+                    .join();
+            return result == null ? fallback : result;
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
 }

@@ -33,8 +33,9 @@ env:
   watcherEnabled: true
   # Heap relativo ao cgroup (70% de 1Gi ≈ 700Mi). Nunca use -Xmx igual ao limit do pod.
   javaOpts: "-XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=25.0 -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError"
-  llmProvider: "ollama"
-  ollamaEnabled: "true"
+  llmProvider: "none"
+  llmGatewayUrl: "http://srv-llm-gateway:8650"
+  ollamaEnabled: "false"
   openaiEnabled: "false"
   anthropicEnabled: "false"
 

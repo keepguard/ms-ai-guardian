@@ -73,6 +73,8 @@ spec:
           value: {{ .Values.env.watcherEnabled | quote }}
         - name: APP_GUARDIAN_LLM_PROVIDER
           value: {{ .Values.env.llmProvider | quote }}
+        - name: LLM_GATEWAY_URL
+          value: {{ .Values.env.llmGatewayUrl | quote }}
         - name: APP_GUARDIAN_OLLAMA_ENABLED
           value: {{ .Values.env.ollamaEnabled | quote }}
         - name: APP_GUARDIAN_OPENAI_ENABLED
