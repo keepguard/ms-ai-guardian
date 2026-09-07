@@ -2,7 +2,7 @@ package com.keepguard.ms_ai_guardian.infrastructure.llm;
 
 import com.keepguard.ms_ai_guardian.application.port.out.llm.LlmPort;
 import com.keepguard.ms_ai_guardian.domain.entity.LlmInvocation;
-import com.keepguard.ms_ai_guardian.domain.repository.LlmInvocationRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.LlmInvocationRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class SpringAiLlmAdapter implements LlmPort {
 
     private final Optional<ChatClient.Builder> chatClientBuilder;
     private final GuardianLlmProperties llmProperties;
-    private final LlmInvocationRepository invocationRepository;
+    private final LlmInvocationRepositoryPort invocationRepository;
 
     @Override
     public boolean available() {

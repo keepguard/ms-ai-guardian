@@ -7,8 +7,8 @@ import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptCatalogPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptKeys;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
 import com.keepguard.ms_ai_guardian.domain.enums.PullRequestStatus;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.PullRequestLifecycleRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
@@ -26,8 +26,8 @@ import java.util.Optional;
 public class ReviewerAgentService {
 
     private final GitHubPort gitHubClient;
-    private final PullRequestLifecycleRepository prRepository;
-    private final IncidentRepository incidentRepository;
+    private final PullRequestLifecycleRepositoryPort prRepository;
+    private final IncidentRepositoryPort incidentRepository;
     private final EmailNotificationService emailNotificationService;
     private final LlmPort llmPort;
     private final PromptCatalogPort prompts;

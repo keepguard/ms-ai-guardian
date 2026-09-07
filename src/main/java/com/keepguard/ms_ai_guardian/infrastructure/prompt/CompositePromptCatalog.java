@@ -3,7 +3,7 @@ package com.keepguard.ms_ai_guardian.infrastructure.prompt;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptCatalogPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptKeys;
 import com.keepguard.ms_ai_guardian.domain.entity.PromptTemplate;
-import com.keepguard.ms_ai_guardian.domain.repository.PromptTemplateRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.PromptTemplateRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.template.ClasspathResourceLoader;
 import com.keepguard.ms_ai_guardian.infrastructure.template.PlaceholderRenderer;
@@ -25,7 +25,7 @@ public class CompositePromptCatalog implements PromptCatalogPort {
 
     private static final String ACTIVE = "ACTIVE";
 
-    private final PromptTemplateRepository repository;
+    private final PromptTemplateRepositoryPort repository;
     private final ClasspathResourceLoader classpath;
     private final StringRedisTemplate redisTemplate;
     private final GuardianProperties properties;

@@ -155,7 +155,34 @@ management:
       enabled: true
     redis:
       enabled: false
+    circuitbreakers:
+      enabled: true
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      llm-gateway:
+        baseConfig: default
+      github-api:
+        baseConfig: default
+  retry:
+    configs:
+      default:
+        maxAttempts: 2
+        waitDuration: 500ms
+    instances:
+      llm-gateway:
+        baseConfig: default
+      github-api:
+        baseConfig: default
+

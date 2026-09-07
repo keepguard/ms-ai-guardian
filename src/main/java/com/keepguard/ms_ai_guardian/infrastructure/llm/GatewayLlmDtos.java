@@ -5,12 +5,12 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
 
-final class GatewayLlmDtos {
+public final class GatewayLlmDtos {
 
     private GatewayLlmDtos() {}
 
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    record CompleteRequest(
+    public record CompleteRequest(
             String providerId,
             String model,
             List<Message> messages,
@@ -22,10 +22,10 @@ final class GatewayLlmDtos {
             String sourceService
     ) {}
 
-    record Message(String role, String content) {}
+    public record Message(String role, String content) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record CompleteResponse(
+    public record CompleteResponse(
             String content,
             String model,
             String providerType,
@@ -33,7 +33,7 @@ final class GatewayLlmDtos {
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Usage(
+    public record Usage(
             Integer promptTokens,
             Integer completionTokens,
             Integer totalTokens,

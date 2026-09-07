@@ -13,9 +13,9 @@ import com.keepguard.ms_ai_guardian.domain.enums.ClosedBy;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentStatus;
 import com.keepguard.ms_ai_guardian.domain.enums.LifecycleEventType;
 import com.keepguard.ms_ai_guardian.domain.enums.RemediationActionType;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentActionExecutionRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentActionSuggestionRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentActionExecutionRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentActionSuggestionRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentRepositoryPort;
 import com.keepguard.ms_ai_guardian.application.port.out.cache.DistributedLockPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import lombok.RequiredArgsConstructor;
@@ -30,9 +30,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class IncidentRemediationService {
 
-    private final IncidentRepository incidentRepository;
-    private final IncidentActionSuggestionRepository suggestionRepository;
-    private final IncidentActionExecutionRepository executionRepository;
+    private final IncidentRepositoryPort incidentRepository;
+    private final IncidentActionSuggestionRepositoryPort suggestionRepository;
+    private final IncidentActionExecutionRepositoryPort executionRepository;
     private final KubernetesInspectorService k8sInspector;
     private final DistributedLockPort deployLock;
     private final GuardianProperties properties;

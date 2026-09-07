@@ -9,14 +9,14 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-final class OAuthSecretCrypto {
+public final class OAuthSecretCrypto {
 
     private static final int IV_LENGTH = 12;
     private static final int TAG_BITS = 128;
 
     private OAuthSecretCrypto() {}
 
-    static String decrypt(String secretBase, String encrypted) {
+    public static String decrypt(String secretBase, String encrypted) {
         if (secretBase == null || secretBase.isBlank() || encrypted == null || encrypted.isBlank()) {
             throw new IllegalArgumentException("AUTH_CLIENT_SECRET_BASE e secret cifrado são obrigatórios");
         }

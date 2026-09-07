@@ -7,8 +7,8 @@ import com.keepguard.ms_ai_guardian.domain.entity.Incident;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentActionSuggestion;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentEvidence;
 import com.keepguard.ms_ai_guardian.domain.enums.InvestigationSource;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentActionSuggestionRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentEvidenceRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentActionSuggestionRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentEvidenceRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,8 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class IncidentInvestigationRecorder {
 
-    private final IncidentEvidenceRepository evidenceRepository;
-    private final IncidentActionSuggestionRepository suggestionRepository;
+    private final IncidentEvidenceRepositoryPort evidenceRepository;
+    private final IncidentActionSuggestionRepositoryPort suggestionRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional

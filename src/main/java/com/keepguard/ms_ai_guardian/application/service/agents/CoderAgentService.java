@@ -1,6 +1,6 @@
 package com.keepguard.ms_ai_guardian.application.service.agents;
 
-import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
+import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultViewDTO;
 import com.keepguard.ms_ai_guardian.application.port.out.github.GitHubPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.LlmPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptCatalogPort;
@@ -9,7 +9,7 @@ import com.keepguard.ms_ai_guardian.adapters.out.notification.EmailNotificationS
 import com.keepguard.ms_ai_guardian.domain.classification.BusinessVerdict;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
 import com.keepguard.ms_ai_guardian.domain.enums.PullRequestStatus;
-import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.PullRequestLifecycleRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
@@ -31,7 +31,7 @@ import java.util.UUID;
 public class CoderAgentService {
 
     private final GitHubPort gitHubClient;
-    private final PullRequestLifecycleRepository prRepository;
+    private final PullRequestLifecycleRepositoryPort prRepository;
     private final EmailNotificationService emailNotificationService;
     private final SourceFileResolver sourceFileResolver;
     private final SoftwareArchitectAgentService architectAgentService;
@@ -42,7 +42,7 @@ public class CoderAgentService {
     private final GuardianProperties guardianProperties;
 
     public Optional<PullRequestLifecycle> createHotfixPullRequest(
-            DiagnosticResultDTO incident,
+            DiagnosticResultViewDTO incident,
             String rawStackTrace,
             BusinessVerdict businessVerdict) {
 
@@ -183,7 +183,7 @@ public class CoderAgentService {
         return prRepository.save(pr);
     }
 
-    private String generateCodeFixWithAi(String serviceName, String filePath, DiagnosticResultDTO incident,
+    private String generateCodeFixWithAi(String serviceName, String filePath, DiagnosticResultViewDTO incident,
             String currentCode, String stackTrace, Integer incidentLine) {
         if (!llmPort.available()) {
             log.warn("[CoderAgent] LLM indisponível.");
@@ -270,7 +270,7 @@ public class CoderAgentService {
     }
 
     private String buildPrDescriptionMarkdown(
-            DiagnosticResultDTO incident,
+            DiagnosticResultViewDTO incident,
             String filePath,
             String rootCause,
             String action,
@@ -323,7 +323,7 @@ public class CoderAgentService {
         return prompts.render(PromptKeys.PR_BODY, vars);
     }
 
-    private static String joinIncidentText(DiagnosticResultDTO incident) {
+    private static String joinIncidentText(DiagnosticResultViewDTO incident) {
         if (incident == null) {
             return "";
         }

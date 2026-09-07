@@ -3,7 +3,7 @@ package com.keepguard.ms_ai_guardian.infrastructure.classification;
 import com.keepguard.ms_ai_guardian.domain.classification.ClassificationRule;
 import com.keepguard.ms_ai_guardian.domain.entity.ClassificationRuleEntity;
 import com.keepguard.ms_ai_guardian.domain.enums.ClassificationVerdict;
-import com.keepguard.ms_ai_guardian.domain.repository.ClassificationRuleRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.ClassificationRuleRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.template.ClasspathResourceLoader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ClassificationCatalog {
 
-    private final ClassificationRuleRepository repository;
+    private final ClassificationRuleRepositoryPort repository;
     private final ClasspathResourceLoader classpath;
 
     public List<ClassificationRule> activeRules() {

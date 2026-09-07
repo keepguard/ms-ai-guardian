@@ -5,7 +5,7 @@ import com.keepguard.ms_ai_guardian.application.port.out.cache.DistributedLockPo
 import com.keepguard.ms_ai_guardian.application.port.out.k8s.KubernetesOpsPort;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
 import com.keepguard.ms_ai_guardian.domain.enums.PullRequestStatus;
-import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.PullRequestLifecycleRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class DeployerAgentService {
 
-    private final PullRequestLifecycleRepository prRepository;
+    private final PullRequestLifecycleRepositoryPort prRepository;
     private final EmailNotificationService emailNotificationService;
     private final KubernetesOpsPort kubernetesOps;
     private final DistributedLockPort deployLock;

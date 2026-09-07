@@ -1,7 +1,7 @@
 package com.keepguard.ms_ai_guardian.application.service.sre;
 
 import com.keepguard.ms_ai_guardian.domain.entity.GuardianAlertRecipient;
-import com.keepguard.ms_ai_guardian.domain.repository.GuardianAlertRecipientRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.GuardianAlertRecipientRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,7 +17,7 @@ public class AlertRecipientService {
 
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
-    private final GuardianAlertRecipientRepository repository;
+    private final GuardianAlertRecipientRepositoryPort repository;
     private final GuardianProperties properties;
 
     @Transactional

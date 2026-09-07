@@ -1,21 +1,18 @@
 package com.keepguard.ms_ai_guardian.infrastructure.llm;
 
+import com.keepguard.ms_ai_guardian.adapters.out.feign.LlmGatewayClient;
+import com.keepguard.ms_ai_guardian.application.port.out.auth.AuthTokenPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.LlmPort;
 import com.keepguard.ms_ai_guardian.domain.entity.LlmInvocation;
-import com.keepguard.ms_ai_guardian.domain.repository.LlmInvocationRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.LlmInvocationRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianLlmProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
-import com.keepguard.ms_ai_guardian.infrastructure.oauth.OAuthClientCredentialsClient;
 import com.keepguard.ms_ai_guardian.infrastructure.util.LlmContextLimiter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -31,21 +28,21 @@ public class GatewayLlmAdapter implements LlmPort {
 
     private final GuardianLlmProperties llmProperties;
     private final GuardianProperties guardianProperties;
-    private final LlmInvocationRepository invocationRepository;
-    private final OAuthClientCredentialsClient oauthClient;
-    private final RestClient restClient;
+    private final LlmInvocationRepositoryPort invocationRepository;
+    private final AuthTokenPort authTokenPort;
+    private final LlmGatewayClient llmGatewayClient;
 
     public GatewayLlmAdapter(
             GuardianLlmProperties llmProperties,
             GuardianProperties guardianProperties,
-            LlmInvocationRepository invocationRepository,
-            OAuthClientCredentialsClient oauthClient,
-            @Qualifier("llmGatewayRestClient") RestClient restClient) {
+            LlmInvocationRepositoryPort invocationRepository,
+            AuthTokenPort authTokenPort,
+            LlmGatewayClient llmGatewayClient) {
         this.llmProperties = llmProperties;
         this.guardianProperties = guardianProperties;
         this.invocationRepository = invocationRepository;
-        this.oauthClient = oauthClient;
-        this.restClient = restClient;
+        this.authTokenPort = authTokenPort;
+        this.llmGatewayClient = llmGatewayClient;
     }
 
     @Override
@@ -93,25 +90,18 @@ public class GatewayLlmAdapter implements LlmPort {
                 correlationId,
                 SOURCE_SERVICE
         );
+        String authorization = bearer(companyId).map(token -> "Bearer " + token).orElse(null);
         try {
             return LlmContextLimiter.invokeWithTimeout(
                     () -> {
                         try {
-                            return restClient.post()
-                                    .uri(completeUri())
-                                    .contentType(MediaType.APPLICATION_JSON)
-                                    .headers(headers -> {
-                                        if (StringUtils.hasText(companyId)) {
-                                            headers.set("X-Company-Id", companyId);
-                                        }
-                                        headers.set("X-Correlation-ID", correlationId);
-                                        bearer(companyId).ifPresent(headers::setBearerAuth);
-                                    })
-                                    .body(payload)
-                                    .retrieve()
-                                    .body(GatewayLlmDtos.CompleteResponse.class);
-                        } catch (RestClientResponseException e) {
-                            log.warn("LLM gateway HTTP {} ({}): {}", e.getStatusCode().value(), request.promptKey(), e.getStatusText());
+                            return llmGatewayClient.complete(
+                                    payload,
+                                    StringUtils.hasText(companyId) ? companyId : null,
+                                    correlationId,
+                                    authorization);
+                        } catch (Exception e) {
+                            log.warn("LLM gateway HTTP falhou ({}): {}", request.promptKey(), e.getMessage());
                             return null;
                         }
                     },
@@ -121,14 +111,6 @@ public class GatewayLlmAdapter implements LlmPort {
             log.warn("LLM gateway HTTP falhou ({}): {}", request.promptKey(), e.getMessage());
             return null;
         }
-    }
-
-    private String completeUri() {
-        String base = llmProperties.getGatewayUrl() == null ? "" : llmProperties.getGatewayUrl().trim();
-        if (base.endsWith("/")) {
-            base = base.substring(0, base.length() - 1);
-        }
-        return base + "/api/v1/llm/complete";
     }
 
     private void record(LlmRequest request, String output, String model, long latencyMs, boolean fallback) {
@@ -150,9 +132,9 @@ public class GatewayLlmAdapter implements LlmPort {
     }
 
     private Optional<String> bearer(String companyId) {
-        if (oauthClient != null && StringUtils.hasText(companyId)) {
+        if (authTokenPort != null && StringUtils.hasText(companyId)) {
             try {
-                Optional<String> token = oauthClient.getToken(UUID.fromString(companyId));
+                Optional<String> token = authTokenPort.getToken(UUID.fromString(companyId));
                 if (token.isPresent()) {
                     return token;
                 }

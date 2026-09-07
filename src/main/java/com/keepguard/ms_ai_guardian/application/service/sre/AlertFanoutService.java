@@ -8,7 +8,7 @@ import com.keepguard.ms_ai_guardian.domain.entity.Incident;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentActionSuggestion;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentAlertDelivery;
 import com.keepguard.ms_ai_guardian.domain.enums.DeliveryOutcome;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentAlertDeliveryRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentAlertDeliveryRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ public class AlertFanoutService {
 
     private final AlertRecipientService recipientService;
     private final EmailNotificationService emailNotificationService;
-    private final IncidentAlertDeliveryRepository deliveryRepository;
+    private final IncidentAlertDeliveryRepositoryPort deliveryRepository;
     private final GuardianProperties properties;
     private final AlertCooldownPort alertCooldownPort;
 

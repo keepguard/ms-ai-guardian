@@ -1,8 +1,9 @@
 package com.keepguard.ms_ai_guardian.adapters.out.notification;
 
 import com.keepguard.ms_ai_guardian.adapters.out.audit.GuardianAuditPublisher;
-import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
+import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultViewDTO;
 import com.keepguard.ms_ai_guardian.application.port.out.cache.RateLimiterPort;
+import com.keepguard.ms_ai_guardian.application.port.out.notification.CommunicationMessagePort;
 import com.keepguard.ms_ai_guardian.application.port.out.notification.NotificationKind;
 import com.keepguard.ms_ai_guardian.application.port.out.notification.NotificationPort;
 import com.keepguard.ms_ai_guardian.domain.entity.PullRequestLifecycle;
@@ -33,10 +34,7 @@ public class EmailNotificationService implements NotificationPort {
     private final EmailTemplateRenderer templates;
     private final GuardianProperties properties;
     private final RateLimiterPort rateLimiter;
-    private final org.springframework.web.client.RestClient restClient = org.springframework.web.client.RestClient.create();
-
-    @Value("${app.communication.url:http://ms-communication:8082}")
-    private String communicationUrl;
+    private final CommunicationMessagePort communicationMessagePort;
 
     @Value("${app.rabbitmq.email-exchange:srv-email-google-sender-exchange-dev}")
     private String emailExchange;
@@ -70,7 +68,7 @@ public class EmailNotificationService implements NotificationPort {
         return published;
     }
 
-    public boolean sendIncidentDiagnosticEmail(DiagnosticResultDTO result) {
+    public boolean sendIncidentDiagnosticEmail(DiagnosticResultViewDTO result) {
         String color = switch (result.getSeverity()) {
             case CRITICAL -> "#dc2626";
             case HIGH -> "#ea580c";
@@ -97,7 +95,7 @@ public class EmailNotificationService implements NotificationPort {
         ));
     }
 
-    public boolean sendPrOpenedEmail(PullRequestLifecycle pr, DiagnosticResultDTO incident) {
+    public boolean sendPrOpenedEmail(PullRequestLifecycle pr, DiagnosticResultViewDTO incident) {
         String prUrl = prUrl(pr);
         String subject = String.format("🛠️ [AI Guardian] PR #%d aberto: %s", pr.getPrNumber(), pr.getRepoName());
         return send(new NotificationCommand(
@@ -284,14 +282,7 @@ public class EmailNotificationService implements NotificationPort {
                 "serviceName", serviceName,
                 "diagnosticReportHtml", htmlBody));
         try {
-            restClient.post()
-                    .uri(communicationUrl + "/api/v1/messages/send")
-                    .header("X-Company-Id", properties.getTenantId())
-                    .header("X-Correlation-ID", correlationId)
-                    .header("Content-Type", "application/json")
-                    .body(communicationPayload)
-                    .retrieve()
-                    .toBodilessEntity();
+            communicationMessagePort.sendMessage(communicationPayload, properties.getTenantId(), correlationId);
             return true;
         } catch (Exception httpEx) {
             log.error("Falha no envio HTTP e no RabbitMQ direto: {}", httpEx.getMessage());

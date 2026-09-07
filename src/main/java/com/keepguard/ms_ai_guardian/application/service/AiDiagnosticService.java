@@ -3,7 +3,7 @@ package com.keepguard.ms_ai_guardian.application.service;
 import com.keepguard.ms_ai_guardian.adapters.out.audit.GuardianAuditPublisher;
 import com.keepguard.ms_ai_guardian.adapters.out.k8s.KubernetesInspectorService;
 import com.keepguard.ms_ai_guardian.application.dto.ClusterFacts;
-import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
+import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultViewDTO;
 import com.keepguard.ms_ai_guardian.application.dto.LlmInvestigationResult;
 import com.keepguard.ms_ai_guardian.application.service.agents.BusinessAnalystAgentService;
 import com.keepguard.ms_ai_guardian.domain.enums.ClassificationVerdict;
@@ -17,8 +17,8 @@ import com.keepguard.ms_ai_guardian.domain.enums.K8sConclusion;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentSeverity;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentStatus;
 import com.keepguard.ms_ai_guardian.domain.enums.LifecycleEventType;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentActionSuggestionRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentActionSuggestionRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,7 +34,7 @@ import java.util.UUID;
 public class AiDiagnosticService {
 
     private final KubernetesInspectorService k8sInspector;
-    private final IncidentRepository incidentRepository;
+    private final IncidentRepositoryPort incidentRepository;
     private final BusinessAnalystAgentService businessAnalystAgentService;
     private final Optional<com.keepguard.ms_ai_guardian.application.service.agents.CoderAgentService> coderAgentService;
     private final Optional<com.keepguard.ms_ai_guardian.application.service.agents.ReviewerAgentService> reviewerAgentService;
@@ -42,11 +42,11 @@ public class AiDiagnosticService {
     private final IncidentInvestigationRecorder investigationRecorder;
     private final IncidentLifecycleService lifecycleService;
     private final AlertFanoutService alertFanoutService;
-    private final IncidentActionSuggestionRepository suggestionRepository;
+    private final IncidentActionSuggestionRepositoryPort suggestionRepository;
     private final GuardianAuditPublisher auditPublisher;
     private final GuardianProperties guardianProperties;
 
-    public DiagnosticResultDTO diagnosePod(String namespace, String podName, String serviceName, String errorReason, boolean forceSendEmail) {
+    public DiagnosticResultViewDTO diagnosePod(String namespace, String podName, String serviceName, String errorReason, boolean forceSendEmail) {
         log.info("Iniciando diagnóstico inteligente para pod: {}/{} | Serviço: {}", namespace, podName, serviceName);
 
         ClusterFacts facts = k8sInspector.collectFacts(namespace, podName, serviceName);
@@ -102,7 +102,7 @@ public class AiDiagnosticService {
                 (incident.getInvestigationSource() != null ? incident.getInvestigationSource().name() : "HEURISTIC")
                         + " " + incident.getK8sConclusion());
 
-        DiagnosticResultDTO resultDTO = toDto(incident, warningEvents, false);
+        DiagnosticResultViewDTO resultDTO = toDto(incident, warningEvents, false);
         var businessVerdict = businessAnalystAgentService.evaluateIncident(resultDTO, recentLogs);
 
         var suggestions = suggestionRepository.findByIncidentIdOrderByCreatedAtAsc(incident.getId());
@@ -162,8 +162,8 @@ public class AiDiagnosticService {
                 .build();
     }
 
-    private DiagnosticResultDTO toDto(Incident incident, List<String> warningEvents, boolean notificationSent) {
-        return DiagnosticResultDTO.builder()
+    private DiagnosticResultViewDTO toDto(Incident incident, List<String> warningEvents, boolean notificationSent) {
+        return DiagnosticResultViewDTO.builder()
                 .incidentId(incident.getId())
                 .podName(incident.getPodName())
                 .namespace(incident.getNamespace())

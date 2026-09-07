@@ -3,7 +3,7 @@ package com.keepguard.ms_ai_guardian.application.service.sre;
 import com.keepguard.ms_ai_guardian.domain.entity.Incident;
 import com.keepguard.ms_ai_guardian.domain.entity.IncidentLifecycleEvent;
 import com.keepguard.ms_ai_guardian.domain.enums.LifecycleEventType;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentLifecycleEventRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentLifecycleEventRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class IncidentLifecycleService {
 
-    private final IncidentLifecycleEventRepository repository;
+    private final IncidentLifecycleEventRepositoryPort repository;
 
     public void record(Incident incident, LifecycleEventType type, String detail) {
         repository.save(IncidentLifecycleEvent.builder()

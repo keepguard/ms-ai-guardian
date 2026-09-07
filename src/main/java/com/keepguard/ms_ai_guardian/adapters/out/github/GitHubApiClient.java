@@ -2,28 +2,33 @@ package com.keepguard.ms_ai_guardian.adapters.out.github;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keepguard.ms_ai_guardian.adapters.out.feign.GitHubClient;
 import com.keepguard.ms_ai_guardian.application.port.out.cache.RateLimiterPort;
 import com.keepguard.ms_ai_guardian.application.port.out.github.GitHubPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 @Slf4j
-@Service
+@Component
 @RequiredArgsConstructor
 public class GitHubApiClient implements GitHubPort {
 
+    private static final String ACCEPT = "application/vnd.github+json";
+
     private final ObjectMapper objectMapper;
     private final RateLimiterPort rateLimiterService;
-    private final RestClient restClient = RestClient.builder()
-            .baseUrl("https://api.github.com")
-            .build();
+    private final GitHubClient gitHubClient;
 
     @Value("${app.github.token:${GITHUB_TOKEN:}}")
     private String githubToken;
@@ -41,18 +46,10 @@ public class GitHubApiClient implements GitHubPort {
         return "Bearer " + githubToken.trim();
     }
 
-    /**
-     * Obtém o SHA do último commit da branch base (ex: main).
-     */
+    @Override
     public String getBranchSha(String repoName, String branchName) {
         try {
-            String response = restClient.get()
-                    .uri("/repos/{owner}/{repo}/git/ref/heads/{branch}", githubOwner, repoName, branchName)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .retrieve()
-                    .body(String.class);
-
+            String response = gitHubClient.getBranchRef(githubOwner, repoName, branchName, getAuthHeader(), ACCEPT);
             JsonNode root = objectMapper.readTree(response);
             return root.path("object").path("sha").asText();
         } catch (Exception e) {
@@ -61,25 +58,15 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Cria uma nova branch a partir de um SHA base.
-     */
+    @Override
     public boolean createBranch(String repoName, String newBranchName, String baseSha) {
         try {
-            Map<String, Object> body = Map.of(
-                    "ref", "refs/heads/" + newBranchName,
-                    "sha", baseSha
-            );
-
-            restClient.post()
-                    .uri("/repos/{owner}/{repo}/git/refs", githubOwner, repoName)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .toBodilessEntity();
-
+            gitHubClient.createRef(
+                    githubOwner,
+                    repoName,
+                    getAuthHeader(),
+                    ACCEPT,
+                    Map.of("ref", "refs/heads/" + newBranchName, "sha", baseSha));
             log.info("🌿 Branch '{}' criada com sucesso no repositório {}/{}", newBranchName, githubOwner, repoName);
             return true;
         } catch (Exception e) {
@@ -88,19 +75,11 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Lista arquivos de código do repositório (árvore recursiva da branch).
-     */
+    @Override
     public List<String> listSourceFilePaths(String repoName, String branch) {
         try {
             String sha = getBranchSha(repoName, branch);
-            String response = restClient.get()
-                    .uri("/repos/{owner}/{repo}/git/trees/{sha}?recursive=1", githubOwner, repoName, sha)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .retrieve()
-                    .body(String.class);
-
+            String response = gitHubClient.getTree(githubOwner, repoName, sha, 1, getAuthHeader(), ACCEPT);
             JsonNode root = objectMapper.readTree(response);
             List<String> paths = new ArrayList<>();
             JsonNode tree = root.path("tree");
@@ -131,20 +110,15 @@ public class GitHubApiClient implements GitHubPort {
         return lower.endsWith(".go") || lower.endsWith(".java") || lower.endsWith(".kt")
                 || lower.endsWith(".kts");
     }
+
+    @Override
     public Map<String, String> getFileContent(String repoName, String filePath, String branch) {
         try {
-            String response = restClient.get()
-                    .uri("/repos/{owner}/{repo}/contents/{path}?ref={branch}", githubOwner, repoName, filePath, branch)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .retrieve()
-                    .body(String.class);
-
+            String response = gitHubClient.getFileContent(githubOwner, repoName, filePath, branch, getAuthHeader(), ACCEPT);
             JsonNode root = objectMapper.readTree(response);
             String sha = root.path("sha").asText();
             String encodedContent = root.path("content").asText().replaceAll("\\s", "");
             String content = new String(Base64.getDecoder().decode(encodedContent), StandardCharsets.UTF_8);
-
             return Map.of("sha", sha, "content", content);
         } catch (Exception e) {
             log.warn("Arquivo {} não encontrado ou erro na leitura em {}/{}: {}", filePath, githubOwner, repoName, e.getMessage());
@@ -152,9 +126,7 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Commita uma alteração em um arquivo no GitHub.
-     */
+    @Override
     public boolean commitFileChange(String repoName, String filePath, String newContent, String commitMessage, String branch, String fileSha) {
         try {
             String base64Content = Base64.getEncoder().encodeToString(newContent.getBytes(StandardCharsets.UTF_8));
@@ -165,16 +137,7 @@ public class GitHubApiClient implements GitHubPort {
             if (fileSha != null && !fileSha.isBlank()) {
                 body.put("sha", fileSha);
             }
-
-            restClient.put()
-                    .uri("/repos/{owner}/{repo}/contents/{path}", githubOwner, repoName, filePath)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .toBodilessEntity();
-
+            gitHubClient.putFileContent(githubOwner, repoName, filePath, getAuthHeader(), ACCEPT, body);
             log.info("💾 Commit realizado com sucesso no arquivo {} na branch {}", filePath, branch);
             return true;
         } catch (Exception e) {
@@ -183,31 +146,18 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Cria um Pull Request no repositório.
-     */
+    @Override
     public Map<String, Object> createPullRequest(String repoName, String title, String bodyMarkdown, String headBranch, String baseBranch) {
         try {
-            Map<String, Object> requestBody = Map.of(
-                    "title", title,
-                    "body", bodyMarkdown,
-                    "head", headBranch,
-                    "base", baseBranch
-            );
-
-            String response = restClient.post()
-                    .uri("/repos/{owner}/{repo}/pulls", githubOwner, repoName)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(requestBody)
-                    .retrieve()
-                    .body(String.class);
-
+            String response = gitHubClient.createPullRequest(
+                    githubOwner,
+                    repoName,
+                    getAuthHeader(),
+                    ACCEPT,
+                    Map.of("title", title, "body", bodyMarkdown, "head", headBranch, "base", baseBranch));
             JsonNode root = objectMapper.readTree(response);
             int prNumber = root.path("number").asInt();
             String htmlUrl = root.path("html_url").asText();
-
             log.info("🚀 Pull Request #{} aberto com sucesso: {}", prNumber, htmlUrl);
             return Map.of("prNumber", prNumber, "htmlUrl", htmlUrl);
         } catch (Exception e) {
@@ -216,25 +166,16 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Submete uma revisão no Pull Request (APPROVE, REQUEST_CHANGES ou COMMENT).
-     */
+    @Override
     public boolean submitReview(String repoName, int prNumber, String event, String commentBody) {
         try {
-            Map<String, Object> body = Map.of(
-                    "body", commentBody,
-                    "event", event // APPROVE, REQUEST_CHANGES, COMMENT
-            );
-
-            restClient.post()
-                    .uri("/repos/{owner}/{repo}/pulls/{pull_number}/reviews", githubOwner, repoName, prNumber)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .toBodilessEntity();
-
+            gitHubClient.submitReview(
+                    githubOwner,
+                    repoName,
+                    prNumber,
+                    getAuthHeader(),
+                    ACCEPT,
+                    Map.of("body", commentBody, "event", event));
             log.info("🧐 Revisão ({}) submetida no PR #{} do repo {}", event, prNumber, repoName);
             return true;
         } catch (Exception e) {
@@ -243,22 +184,11 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Adiciona um comentário geral no Pull Request / Issue.
-     */
+    @Override
     public boolean addComment(String repoName, int prNumber, String commentText) {
         try {
-            Map<String, Object> body = Map.of("body", commentText);
-
-            restClient.post()
-                    .uri("/repos/{owner}/{repo}/issues/{issue_number}/comments", githubOwner, repoName, prNumber)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .toBodilessEntity();
-
+            gitHubClient.addIssueComment(
+                    githubOwner, repoName, prNumber, getAuthHeader(), ACCEPT, Map.of("body", commentText));
             log.info("💬 Comentário adicionado no PR #{}", prNumber);
             return true;
         } catch (Exception e) {
@@ -267,25 +197,16 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Responde diretamente a um comentário de revisão inline (diff comment thread).
-     */
+    @Override
     public boolean replyToPrReviewComment(String repoName, int prNumber, String commentId, String replyText) {
         try {
-            Map<String, Object> body = Map.of(
-                    "body", replyText,
-                    "in_reply_to", Long.parseLong(commentId)
-            );
-
-            restClient.post()
-                    .uri("/repos/{owner}/{repo}/pulls/{pull_number}/comments", githubOwner, repoName, prNumber)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(body)
-                    .retrieve()
-                    .toBodilessEntity();
-
+            gitHubClient.replyToReviewComment(
+                    githubOwner,
+                    repoName,
+                    prNumber,
+                    getAuthHeader(),
+                    ACCEPT,
+                    Map.of("body", replyText, "in_reply_to", Long.parseLong(commentId)));
             log.info("💬 Resposta inline enviada na thread do comentário #{} no PR #{}", commentId, prNumber);
             return true;
         } catch (Exception e) {
@@ -294,18 +215,10 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Obtém os comentários de revisão inline (diff comments) do Pull Request.
-     */
+    @Override
     public List<Map<String, String>> getPrReviewComments(String repoName, int prNumber) {
         try {
-            String response = restClient.get()
-                    .uri("/repos/{owner}/{repo}/pulls/{pull_number}/comments", githubOwner, repoName, prNumber)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .retrieve()
-                    .body(String.class);
-
+            String response = gitHubClient.listReviewComments(githubOwner, repoName, prNumber, getAuthHeader(), ACCEPT);
             JsonNode root = objectMapper.readTree(response);
             List<Map<String, String>> comments = new ArrayList<>();
             if (root.isArray()) {
@@ -325,23 +238,14 @@ public class GitHubApiClient implements GitHubPort {
         }
     }
 
-    /**
-     * Verifica o estado do PR (se foi mergeado pelo humano).
-     */
+    @Override
     public Map<String, Object> getPullRequestStatus(String repoName, int prNumber) {
         try {
-            String response = restClient.get()
-                    .uri("/repos/{owner}/{repo}/pulls/{pull_number}", githubOwner, repoName, prNumber)
-                    .header("Authorization", getAuthHeader())
-                    .header("Accept", "application/vnd.github+json")
-                    .retrieve()
-                    .body(String.class);
-
+            String response = gitHubClient.getPullRequest(githubOwner, repoName, prNumber, getAuthHeader(), ACCEPT);
             JsonNode root = objectMapper.readTree(response);
             boolean merged = root.path("merged").asBoolean(false);
             String state = root.path("state").asText();
             String mergedBy = root.path("merged_by").path("login").asText("human");
-
             return Map.of("merged", merged, "state", state, "mergedBy", mergedBy);
         } catch (Exception e) {
             log.error("Erro ao checar status do PR #{}: {}", prNumber, e.getMessage());

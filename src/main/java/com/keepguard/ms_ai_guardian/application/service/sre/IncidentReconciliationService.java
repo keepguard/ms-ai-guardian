@@ -11,8 +11,8 @@ import com.keepguard.ms_ai_guardian.domain.entity.IncidentEvidence;
 import com.keepguard.ms_ai_guardian.domain.enums.ClosedBy;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentStatus;
 import com.keepguard.ms_ai_guardian.domain.enums.LifecycleEventType;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentEvidenceRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentEvidenceRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
@@ -36,12 +36,12 @@ public class IncidentReconciliationService {
             IncidentStatus.ACTION_RUNNING
     );
 
-    private final IncidentRepository incidentRepository;
+    private final IncidentRepositoryPort incidentRepository;
     private final KubernetesInspectorService k8sInspector;
     private final IncidentLifecycleService lifecycleService;
     private final AlertFanoutService alertFanoutService;
     private final GuardianAuditPublisher auditPublisher;
-    private final IncidentEvidenceRepository evidenceRepository;
+    private final IncidentEvidenceRepositoryPort evidenceRepository;
     private final ObjectMapper objectMapper;
     private final ClusterStormService clusterStormService;
     private final GuardianProperties guardianProperties;

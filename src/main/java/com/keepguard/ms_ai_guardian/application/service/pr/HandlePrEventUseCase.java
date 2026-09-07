@@ -8,8 +8,8 @@ import com.keepguard.ms_ai_guardian.application.service.agents.DeployerAgentServ
 import com.keepguard.ms_ai_guardian.application.service.agents.ReviewerAgentService;
 import com.keepguard.ms_ai_guardian.domain.entity.ProcessedComment;
 import com.keepguard.ms_ai_guardian.domain.enums.PullRequestStatus;
-import com.keepguard.ms_ai_guardian.domain.repository.ProcessedCommentRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.PullRequestLifecycleRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.ProcessedCommentRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.PullRequestLifecycleRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,8 +23,8 @@ public class HandlePrEventUseCase implements HandlePrEventPort {
     private final CoderAgentService coderAgent;
     private final ReviewerAgentService reviewerAgent;
     private final DeployerAgentService deployerAgent;
-    private final PullRequestLifecycleRepository prRepository;
-    private final ProcessedCommentRepository processedCommentRepository;
+    private final PullRequestLifecycleRepositoryPort prRepository;
+    private final ProcessedCommentRepositoryPort processedCommentRepository;
     private final GitHubPort gitHubClient;
     private final IdempotencyPort idempotency;
     private final GuardianProperties properties;
@@ -85,6 +85,7 @@ public class HandlePrEventUseCase implements HandlePrEventPort {
         }
     }
 
+    @Override
     public boolean beginDelivery(String deliveryId) {
         if (deliveryId == null || deliveryId.isBlank()) {
             return true;

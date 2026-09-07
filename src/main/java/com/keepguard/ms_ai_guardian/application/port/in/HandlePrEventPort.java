@@ -7,4 +7,6 @@ public interface HandlePrEventPort {
     void onComment(String repoName, int prNumber, String commentId, String body, String author);
 
     void scanOpenPullRequests();
+
+    boolean beginDelivery(String deliveryId);
 }

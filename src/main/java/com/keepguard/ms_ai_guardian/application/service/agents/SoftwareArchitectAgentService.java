@@ -1,6 +1,6 @@
 package com.keepguard.ms_ai_guardian.application.service.agents;
 
-import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultDTO;
+import com.keepguard.ms_ai_guardian.application.dto.DiagnosticResultViewDTO;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptCatalogPort;
 import com.keepguard.ms_ai_guardian.application.port.out.llm.PromptKeys;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +16,7 @@ public class SoftwareArchitectAgentService {
 
     private final PromptCatalogPort prompts;
 
-    public ArchitecturalAssessment designSolution(DiagnosticResultDTO incident, String serviceName, String targetFile,
+    public ArchitecturalAssessment designSolution(DiagnosticResultViewDTO incident, String serviceName, String targetFile,
             String rawStackTrace) {
         String error = incident != null && incident.getErrorReason() != null ? incident.getErrorReason() : "falha no fluxo";
         String file = targetFile != null && !targetFile.isBlank() ? targetFile : "camada de aplicação";

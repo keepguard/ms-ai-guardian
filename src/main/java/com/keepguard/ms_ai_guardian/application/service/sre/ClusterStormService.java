@@ -12,8 +12,8 @@ import com.keepguard.ms_ai_guardian.domain.entity.IncidentEvidence;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentSeverity;
 import com.keepguard.ms_ai_guardian.domain.enums.IncidentStatus;
 import com.keepguard.ms_ai_guardian.domain.enums.LifecycleEventType;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentEvidenceRepository;
-import com.keepguard.ms_ai_guardian.domain.repository.IncidentRepository;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentEvidenceRepositoryPort;
+import com.keepguard.ms_ai_guardian.application.port.out.persistence.IncidentRepositoryPort;
 import com.keepguard.ms_ai_guardian.infrastructure.config.GuardianProperties;
 import com.keepguard.ms_ai_guardian.infrastructure.i18n.GuardianPortuguese;
 import lombok.RequiredArgsConstructor;
@@ -33,11 +33,11 @@ public class ClusterStormService {
     private final KubernetesInspectorService k8sInspector;
     private final GuardianProperties properties;
     private final ClusterStormStatePort stormStatePort;
-    private final IncidentRepository incidentRepository;
+    private final IncidentRepositoryPort incidentRepository;
     private final IncidentLifecycleService lifecycleService;
     private final AlertFanoutService alertFanoutService;
     private final GuardianAuditPublisher auditPublisher;
-    private final IncidentEvidenceRepository evidenceRepository;
+    private final IncidentEvidenceRepositoryPort evidenceRepository;
     private final ObjectMapper objectMapper;
 
     /**
