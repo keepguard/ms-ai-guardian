@@ -1,6 +1,7 @@
 package com.keepguard.ms_ai_guardian.application.service.pr;
 
 import com.keepguard.ms_ai_guardian.application.port.in.HandlePrEventPort;
+import com.keepguard.ms_ai_guardian.adapters.out.audit.GuardianAuditPublisher;
 import com.keepguard.ms_ai_guardian.application.port.out.cache.IdempotencyPort;
 import com.keepguard.ms_ai_guardian.application.port.out.github.GitHubPort;
 import com.keepguard.ms_ai_guardian.application.service.agents.CoderAgentService;
@@ -28,9 +29,11 @@ public class HandlePrEventUseCase implements HandlePrEventPort {
     private final GitHubPort gitHubClient;
     private final IdempotencyPort idempotency;
     private final GuardianProperties properties;
+    private final GuardianAuditPublisher auditPublisher;
 
     @Override
     public void onPullRequest(String repoName, int prNumber, String action, boolean merged, String sender) {
+        publishWebhookAudit(repoName, prNumber);
         if ("closed".equalsIgnoreCase(action) && merged) {
             log.info("Quality gate humano aprovado. Merge por @{}. Acionando DeployerAgent.", sender);
             deployerAgent.handleMergedPullRequest(repoName, prNumber, sender);
@@ -47,6 +50,7 @@ public class HandlePrEventUseCase implements HandlePrEventPort {
         if (isBotComment(author, body)) {
             return;
         }
+        publishWebhookAudit(repoName, prNumber);
         if (commentId != null && processedCommentRepository.existsByCommentId(commentId)) {
             return;
         }
@@ -91,6 +95,11 @@ public class HandlePrEventUseCase implements HandlePrEventPort {
             return true;
         }
         return idempotency.tryBegin("gh:" + deliveryId, properties.getRedis().getIdempotencyTtlSeconds());
+    }
+
+    private void publishWebhookAudit(String repoName, int prNumber) {
+        String resourceId = (repoName == null ? "" : repoName) + "#" + prNumber;
+        auditPublisher.publish("GUARDIAN_GITHUB_WEBHOOK", "SUCCESS", null, "PR", resourceId);
     }
 
     static boolean isBotComment(String author, String body) {

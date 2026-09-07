@@ -7,6 +7,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.MDC;
+
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -49,13 +51,25 @@ public class GuardianAuditPublisher {
         event.put("schemaVersion", 1);
         event.put("sourceService", "ms-ai-guardian");
         event.put("correlationId", cid);
+        String tenantId = firstNonBlank(MDC.get("tenantId"), MDC.get("companyId"));
+        String companyId = firstNonBlank(MDC.get("companyId"), MDC.get("tenantId"));
+        if (tenantId != null) {
+            event.put("tenantId", tenantId);
+        }
+        if (companyId != null) {
+            event.put("companyId", companyId);
+        }
         event.put("action", action);
         event.put("outcome", outcome);
         Map<String, Object> actor = new HashMap<>();
-        actor.put("type", actorType == null || actorType.isBlank() ? "SYSTEM" : actorType);
+        String resolvedActorType = actorType == null || actorType.isBlank() ? "SYSTEM" : actorType;
         if (actorCodeUser != null && !actorCodeUser.isBlank()) {
             actor.put("codeUser", actorCodeUser);
+            if ("SYSTEM".equalsIgnoreCase(resolvedActorType)) {
+                resolvedActorType = "USER";
+            }
         }
+        actor.put("type", resolvedActorType);
         event.put("actor", actor);
         event.put("resource", Map.of("type", resourceType, "id", resourceId == null ? "" : resourceId));
         CompletableFuture.runAsync(() -> {
@@ -81,5 +95,17 @@ public class GuardianAuditPublisher {
             return null;
         });
         exchangeDeclared.set(true);
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 }
