@@ -1,18 +1,32 @@
 #!/bin/bash
 # =============================================================================
-# 🚀 script-deploy-k8s-prod.sh
-# Atualiza o Pod no Kubernetes de Produção (Hostinger) diretamente do GHCR.
+# 🚀 MINI MANUAL DE USO — script-deploy-k8s-prod.sh (ms-ai-guardian)
+# =============================================================================
+# Este script aplica a imagem do serviço ms-ai-guardian no cluster Kubernetes
+# de Produção (VPS Hostinger - namespace keepguard) a partir do GHCR.
 #
-# Uso:
-#   ./script-deploy-k8s-prod.sh            # Auto-detecta o último Commit SHA local
-#   ./script-deploy-k8s-prod.sh <tag>      # Aplica uma versão/tag específica
+# 📋 OPÇÕES E EXEMPLOS DE USO:
+#
+#   1. Deploy automático do último commit local:
+#      $ ./script-deploy-k8s-prod.sh
+#      -> Detecta o último Commit SHA no git local e aplica no cluster sem risco de cache.
+#
+#   2. Deploy de uma tag ou versão específica:
+#      $ ./script-deploy-k8s-prod.sh <tag>
+#      Exemplos:
+#         $ ./script-deploy-k8s-prod.sh 789c71b
+#         $ ./script-deploy-k8s-prod.sh latest
+#         $ ./script-deploy-k8s-prod.sh develop-latest
+#
+# 🔍 VERIFICAÇÃO:
+#   - O script monitora automaticamente o rollout dos pods até ficarem 100% prontos.
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-SERVICE_NAME="$(basename "${SCRIPT_DIR}")"
+SERVICE_NAME="ms-ai-guardian"
 KUBECONFIG_FILE="${PROJECT_ROOT}/docker/keepguard-kubeconfig.yaml"
 NAMESPACE="${K8S_NAMESPACE:-keepguard}"
 REGISTRY="ghcr.io/keepguard"
@@ -58,7 +72,7 @@ echo ""
 echo -e "${CYAN}🚀 Atualizando deployment/${SERVICE_NAME} para ${IMAGE_TAG}...${NC}"
 kubectl set image "deployment/${SERVICE_NAME}" "${SERVICE_NAME}=${IMAGE_TAG}" -n "${NAMESPACE}"
 
-if [ "$VERSION" = "latest" ]; then
+if [ "$VERSION" = "latest" ] || [[ "$VERSION" == *"latest"* ]]; then
     echo -e "${CYAN}🔄 Disparando rollout restart para baixar a última versão do GitHub...${NC}"
     kubectl rollout restart "deployment/${SERVICE_NAME}" -n "${NAMESPACE}"
 fi
