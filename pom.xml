@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.keepguard</groupId>
 	<artifactId>ms-ai-guardian</artifactId>
-	<version>1.0.51</version>
+	<version>1.0.52</version>
 	<name>ms-ai-guardian</name>
 	<description>KeepGuard AI Guardian - Intelligent Kubernetes Diagnostics and Incident Reasoning Agent</description>
 
@@ -18,7 +18,7 @@
 		<java.version>25</java.version>
 		<spring-ai.version>1.0.0-M6</spring-ai.version>
 		<spring-cloud.version>2025.0.3</spring-cloud.version>
-		<fabric8-k8s.version>6.13.4</fabric8-k8s.version>
+		<fabric8-k8s.version>7.3.2</fabric8-k8s.version>
 		<jacoco.skip>true</jacoco.skip>
 	</properties>
 

@@ -31,9 +31,17 @@
 #   4. Merge na 'main' + deploy imediato no Docker Compose local:
 #      $ ./script-deploy-github-ms-ai-guardian.sh merge main up
 #
+#   5. Pipeline Completo em 1 comando (Merge 'main' + Docker Local + K8s Produção):
+#      $ ./script-deploy-github-ms-ai-guardian.sh merge main up prod
+#      OU simplesmente:
+#      $ ./script-deploy-github-ms-ai-guardian.sh full
+#      -> Faz commit na branch atual, merge na 'main', push GHCR, atualiza o Docker
+#         local com 'up' e aplica imediatamente no cluster Kubernetes de Produção!
+#
 # 🚢 DEPLOY EM PRODUÇÃO (KUBERNETES HOSTINGER):
 #   - Após o merge em 'main', aplique a versão no cluster executando:
 #      $ ./script-deploy-k8s-prod.sh
+#      (ou use o parâmetro 'prod' / 'full' acima para automação total)
 # =============================================================================
 
 set -euo pipefail
@@ -61,11 +69,22 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 
 MERGE_TARGET=""
 DEPLOY_DOCKER=false
+DEPLOY_PROD=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         up)
             DEPLOY_DOCKER=true
+            shift
+            ;;
+        prod)
+            DEPLOY_PROD=true
+            shift
+            ;;
+        full|all)
+            MERGE_TARGET="main"
+            DEPLOY_DOCKER=true
+            DEPLOY_PROD=true
             shift
             ;;
         merge)
@@ -193,6 +212,17 @@ if [ "$DEPLOY_DOCKER" = true ]; then
     log_success "Container ${SERVICE_NAME} recriado com sucesso no Docker local!"
 else
     log_step "Deploy Docker local ignorado (use './${SCRIPT_NAME:-script-deploy.sh} up' para subir local)"
+fi
+
+# 6. Deploy no Kubernetes de Produção (se solicitado 'prod' ou 'full')
+if [ "$DEPLOY_PROD" = true ]; then
+    log_step "Executando deploy automático no Kubernetes de Produção (VPS Hostinger)..."
+    if [ -f "${SCRIPT_DIR}/script-deploy-k8s-prod.sh" ]; then
+        "${SCRIPT_DIR}/script-deploy-k8s-prod.sh" "${BUILD_SHA}"
+    else
+        log_error "script-deploy-k8s-prod.sh não encontrado em ${SCRIPT_DIR}."
+        exit 1
+    fi
 fi
 
 log_success "============================================"

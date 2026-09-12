@@ -61,7 +61,8 @@ public class LlmInvestigationService {
             vars.put("conclusion", facts.getConclusion() != null ? facts.getConclusion().name() : "UNKNOWN");
             vars.put("conclusionLabel", GuardianPortuguese.k8sConclusion(facts.getConclusion()));
             vars.put("warningEvents", String.valueOf(facts.getWarningEvents()));
-            vars.put("logsSnippet", LlmContextLimiter.tail(facts.getLogsSnippet(), 1200));
+            String sanitizedLogs = com.keepguard.ms_ai_guardian.infrastructure.util.PiiLogSanitizer.sanitize(facts.getLogsSnippet());
+            vars.put("logsSnippet", LlmContextLimiter.tail(sanitizedLogs, 1200));
             String prompt = GuardianPortuguese.NARRATIVE_LANGUAGE_RULE + "\n"
                     + prompts.render(PromptKeys.SRE_INVESTIGATE, vars);
             return llmPort.complete(new LlmPort.LlmRequest(

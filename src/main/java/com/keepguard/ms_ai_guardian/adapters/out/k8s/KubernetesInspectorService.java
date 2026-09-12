@@ -340,7 +340,8 @@ public class KubernetesInspectorService {
 
         List<String> events = getRecentWarningEvents(namespace, resolvedPodName);
         String describe = resolvedPodName != null ? describePodHealth(namespace, resolvedPodName) : "Pod não encontrado";
-        String logs = resolvedPodName != null ? getPodLogs(namespace, resolvedPodName, 80) : "";
+        String rawLogs = resolvedPodName != null ? getPodLogs(namespace, resolvedPodName, 80) : "";
+        String logs = com.keepguard.ms_ai_guardian.infrastructure.util.PiiLogSanitizer.sanitize(rawLogs);
 
         K8sConclusion conclusion = classify(deployment == null, replicasZero, crashLoop, imagePull, phase, waiting,
                 events, desired, available);
